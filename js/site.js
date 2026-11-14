@@ -2,7 +2,7 @@
  * Site behaviour for tcd-studio.de
  *
  *  - Menu: mobile toggle, smooth scrolling, active-link highlighting, sticky header
- *  - Info bar: dismissible banner at the top of the page (remembered for 12 hours)
+ *  - Contact form: fetch a fresh captcha after a failed submit
  *
  * Depends on jQuery (`$`) and the Webcard runtime (`viewport`), which are both
  * provided by /webcard/static/app.bundle.*.js and must be loaded first.
@@ -13,8 +13,8 @@
   var MENU_OPEN_CLASSES = 'open open-menu';
   var STICKY_CLASS = 'sticky';
   var ACTIVE_CLASS = 'active';
-  var INFO_BAR_COOKIE = 'cookieBar';
-  var INFO_BAR_HOURS = 12;
+  // Backend error messages after which the captcha token is gone (see backend/contact.php).
+  var CAPTCHA_USED_UP = /^(Wrong security code|Could not send)/;
 
   // Make :active pseudo classes work on iOS.
   document.addEventListener('touchstart', function () {}, false);
@@ -23,7 +23,7 @@
     $('.menu-wrapper').each(function () {
       initMenu($(this));
     });
-    initInfoBar();
+    initFormCaptchaRefresh();
   });
 
   /* ------------------------------------------------------------------ */
@@ -243,44 +243,31 @@
   }
 
   /* ------------------------------------------------------------------ */
-  /* Info bar (top banner with a dismiss button)                         */
+  /* Contact form                                                        */
   /* ------------------------------------------------------------------ */
 
-  function initInfoBar() {
-    var $bar = $('.cookie-bar');
+  /**
+   * Every captcha answer can be checked only once (see backend/captcha.php), but the
+   * Webcard runtime keeps showing the old image after a rejected submit. When the
+   * backend reports that the captcha was used up (wrong answer, or the mail could not
+   * be sent after the captcha had been accepted), fetch a new captcha and clear the
+   * answer field. Other errors (e.g. an invalid e-mail address) keep the answer valid.
+   */
+  function initFormCaptchaRefresh() {
+    $('.ed-form-container').each(function () {
+      var $container = $(this);
 
-    $('.cookie-close').click(function (e) {
-      e.preventDefault();
-      $bar.hide();
-      writeCookie(INFO_BAR_COOKIE, true, INFO_BAR_HOURS / 24);
+      new MutationObserver(function (mutations) {
+        var failed = mutations.some(function (mutation) {
+          return Array.prototype.some.call(mutation.addedNodes, function (node) {
+            return node.nodeType === 1 && node.classList.contains('wv-failure') && CAPTCHA_USED_UP.test(node.textContent);
+          });
+        });
+        if (!failed) return;
+
+        $container.find('input[name$="[text]"]').val('');
+        $container.find('a.regenerate').trigger('click');
+      }).observe(this, { childList: true, subtree: true });
     });
-
-    if (readCookie(INFO_BAR_COOKIE) !== null) {
-      $bar.hide();
-    } else {
-      $bar.show();
-    }
-  }
-
-  function readCookie(name) {
-    var prefix = name + '=';
-    var cookies = document.cookie.split(';');
-
-    for (var i = 0; i < cookies.length; i++) {
-      var cookie = cookies[i].replace(/^ +/, '');
-      if (cookie.indexOf(prefix) === 0) return cookie.substring(prefix.length);
-    }
-
-    return null;
-  }
-
-  function writeCookie(name, value, days) {
-    var expires = '';
-
-    if (days) {
-      expires = '; expires=' + new Date(Date.now() + days * 24 * 60 * 60 * 1000).toUTCString();
-    }
-
-    document.cookie = name + '=' + value + expires + '; path=/';
   }
 })(jQuery);

@@ -1,21 +1,3 @@
-#ed-939194702 {
-  flex-basis: auto;
-}
-#ed-939194705 {
-  flex-basis: auto;
-}
-#ed-939194708 {
-  flex-basis: auto;
-  text-align: left;
-}
-#ed-939194699 > .inner {
-  flex-direction: row;
-  padding: 1rem;
-}
-#ed-939194699 > .inner {
-  place-content: center;
-  align-items: center;
-}
 @media screen and (max-width: 975px) {
   #ed-713619945 > .background-image-holder:not(.ed-lazyload) {
     background-image: url("/images/976/5283903/pexels-photo-860379.jpeg") !important;

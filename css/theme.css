@@ -1,6 +1,3 @@
-body:not(.edit) .hide-cookie-bar {
-  display: none;
-}
 html {
   box-sizing: border-box;
   font-family: sans-serif;
@@ -6241,71 +6238,6 @@ body.open-menu .ed-element.preset-menu-v2-default .menu-trigger .menu-trigger-bo
   body:not(.edit) .ed-element.preset-text-with-image-v4-default .hide-sm {
     display: none;
   }
-}
-.ed-element.preset-cookie-bar-v2-default {
-  background: #3a3c3b;
-  width: 100%;
-  max-width: 100%;
-  display: block;
-  font-size: 0.96rem;
-  background: #3a3c3b;
-}
-body:not(.edit) .ed-element.preset-cookie-bar-v2-default {
-  position: fixed;
-  left: 0;
-  z-index: 102;
-  top: 0;
-}
-.ed-element.preset-cookie-bar-v2-default h1,
-.ed-element.preset-cookie-bar-v2-default .h1,
-.ed-element.preset-cookie-bar-v2-default h2,
-.ed-element.preset-cookie-bar-v2-default .h2,
-.ed-element.preset-cookie-bar-v2-default h3,
-.ed-element.preset-cookie-bar-v2-default .h3,
-.ed-element.preset-cookie-bar-v2-default h4,
-.ed-element.preset-cookie-bar-v2-default .h4,
-.ed-element.preset-cookie-bar-v2-default h5,
-.ed-element.preset-cookie-bar-v2-default .h5,
-.ed-element.preset-cookie-bar-v2-default h6,
-.ed-element.preset-cookie-bar-v2-default .h6 {
-  color: #ff4747;
-}
-.ed-element.preset-cookie-bar-v2-default h1,
-.ed-element.preset-cookie-bar-v2-default .h1 {
-  color: #ff4747;
-}
-.ed-element.preset-cookie-bar-v2-default h2,
-.ed-element.preset-cookie-bar-v2-default .h2 {
-  color: #000;
-}
-.ed-element.preset-cookie-bar-v2-default h3,
-.ed-element.preset-cookie-bar-v2-default .h3 {
-  color: #000;
-}
-.ed-element.preset-cookie-bar-v2-default h4,
-.ed-element.preset-cookie-bar-v2-default .h4 {
-  color: #000;
-}
-.ed-element.preset-cookie-bar-v2-default h5,
-.ed-element.preset-cookie-bar-v2-default .h5 {
-  color: #ff4747;
-}
-.ed-element.preset-cookie-bar-v2-default h6,
-.ed-element.preset-cookie-bar-v2-default .h6 {
-  color: #ff4747;
-}
-.ed-element.preset-cookie-bar-v2-default,
-.ed-element.preset-cookie-bar-v2-default .ed-element:not(.ed-button) > a {
-  color: #fff;
-}
-.ed-element.preset-cookie-bar-v2-default > .inner {
-  margin: calc(-0.5rem/2);
-}
-.ed-element.preset-cookie-bar-v2-default > .inner > .ed-element {
-  margin: calc(0.5rem/2);
-}
-.ed-element.preset-cookie-bar-v2-default a.button {
-  font-size: 0.96rem;
 }
 .ed-element.preset-call-to-action-button-default > .inner {
   padding-top: 4rem;

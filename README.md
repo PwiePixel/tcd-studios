@@ -24,7 +24,7 @@ tcd-programmer/                  TCD-Programmer Developer Group
 
 css/theme.css                    Theme-Styles (Design) – hier wird das Aussehen angepasst
 css/pages/*.css                  seitenspezifische Styles (früher Inline-<style> je Seite)
-js/site.js                       Menü (Mobile-Toggle, Smooth-Scroll, Sticky, aktiver Link) und Info-Leiste
+js/site.js                       Menü (Mobile-Toggle, Smooth-Scroll, Sticky, aktiver Link), neues Captcha nach Fehlversuch
 fonts/                           Poppins (selbst gehostet, keine Verbindung zu Google)
 images/                          nur noch tatsächlich verwendete Bilder
 
