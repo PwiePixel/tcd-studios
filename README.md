@@ -52,9 +52,9 @@ Lokal ausprobieren:
 php -S 127.0.0.1:8080
 ```
 
-> Das Formular im Browser spricht die API immer per `https://` an (so ist es in der Laufzeit fest
-> eingebaut). Lokal über `http://` lässt sich die Seite ansehen, das Absenden des Formulars aber nur
-> hinter HTTPS testen.
+> Das Absenden des Formulars nutzt das Protokoll der Seite, die Captcha-Abfrage der Sitejet-Laufzeit
+> dagegen immer `https://` (so ist es in `webcard/` fest eingebaut). Lokal über `http://` lässt sich die Seite
+> ansehen; das Formular (Captcha) funktioniert vollständig nur hinter HTTPS.
 
 ## Kontaktformular
 
@@ -63,17 +63,24 @@ Betreff, Texte und Spam-Schutz-Werte stehen gesammelt in **`backend/config.php`*
 
 **Wichtig:** Das Postfach `kontakt@tcd-studio.de` muss existieren (oder in `backend/config.php` ändern).
 
+Der Schutz von `backend/` per `backend/.htaccess` gilt für Apache; bei anderen Servern verhindert zusätzlich ein
+Guard in jeder Datei den Direktaufruf.
+
 ## Hinweise / offene Punkte
 
 - **E-Mail-Adressen:** Überall wurden `…@tcd-studio.com` / `…@tcd-studio.agency` auf `…@tcd-studio.de` umgestellt
   (`kontakt@` sowie `creepyx_470@` im Impressum). Bitte sicherstellen, dass diese Postfächer existieren.
-- **Rechtstexte:** Impressum und Datenschutz wurden nur in Domain/Adresse/Zweitstellen-Hinweis angepasst, nicht
-  inhaltlich geprüft. Bitte vor dem Livegang rechtlich gegenlesen.
+- **Rechtstexte:** Im Impressum wurden nur Domain, E-Mail-Adresse, „Website Owner“ (jetzt `TCD-Studio/Agency`) und der
+  Zweitstellen-Hinweis geändert; die Datenschutzerklärung nur in Titel/Meta-Daten. Inhaltlich geprüft wurde nichts,
+  bitte vor dem Livegang rechtlich gegenlesen. Die Datenschutzerklärung bindet wie im Original ein
+  Matomo-Opt-out-Fenster von `page-stats.de` ein (die Seite selbst nutzt kein Tracking); ob das bleiben soll, ist eine
+  inhaltliche Entscheidung.
 - **Formatierung:** Die Laufzeit in `webcard/` sucht das Ziel von `#!next`-Links (Hero-Button „Learn more“, Icon im
   Footer) über `nextSibling`. `js/site.js` (`fixNextLinkTargets`) entfernt dafür die Leerraum-Textknoten, damit die
   Seiten weiterhin lesbar eingerückt bleiben dürfen.
 - **Instagram-Link** im Footer ist wie im Original ein Platzhalter (`/coming-soon`, Seite existiert nicht).
 - **Aufgeräumt:** ungenutzte Länderflaggen-Bibliothek (516 SVGs), alte Favicon-Varianten, nicht eingebundene Bilder
   (`aerostudios/`, `synaptox/`, `dummy.png`) und nicht referenzierte Bildgrößen wurden entfernt (liegen weiterhin im
-  ursprünglichen ZIP). Defekte Footer-Links (`/2136746#…`), falsche Canonical-URLs und der Google-Maps-Key wurden
-  korrigiert bzw. entfernt.
+  ursprünglichen ZIP). Defekte Footer-Links (`/2136746#…`), falsche Canonical-URLs wurden korrigiert, der Google-Maps-Key
+  wurde aus dem Inline-Skript der Seiten entfernt (es gibt keine Karte; die Laufzeit in `webcard/` bringt unverändert
+  ihren eigenen Platzhalter mit).

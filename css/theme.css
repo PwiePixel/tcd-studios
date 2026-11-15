@@ -6321,11 +6321,7 @@ body.open-menu .ed-element.preset-menu-v2-default .menu-trigger .menu-trigger-bo
 .ed-element.preset-call-to-action-button-default .ed-button a {
   text-transform: uppercase;
 }
-/* Reset for <figure> (was an inline <style> on every page) */
-figure {
-  margin: 0;
-}
-/* "Zweitstelle" notice (about section, legal notice and footer) */
+/* "Zweitstelle" notice (about section and footer) */
 .zweitstelle {
   margin-top: 1rem;
 }
