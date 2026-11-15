@@ -37,6 +37,13 @@ Texte: `app/views/site/agb.php` (DE, verbindlich), `terms.php` (EN), Controller 
   Betreiber): [BETRIEB.md](BETRIEB.md), Abschnitt „Ausweisprüfung und Löschung“. Die Rechtstexte dazu stehen in `privacy/index.html`,
   `app/views/site/agb.php` (§ 4, § 5, § 7) und `terms.php`; sie müssen zum tatsächlichen Verhalten des Systems passen.
 
+
+Kundenbereich dazu: `portal/identity.php` (+ `identity-upload.php`) = Upload der Ausweisfotos (nur Ciphertext wird gespeichert), Gate vor dem Einreichen;
+`portal/terminate.php` / `terminated.php` = Dienst beenden (Antrag → Mail-Link → Bestätigung mit Passwort → automatische Löschung).
+Admin: `admin/vault.php` (Schlüssel/Archiv), `admin/identity.php` + `identity-file.php` + `js/vault.js` (Entschlüsselung im Browser), Legal hold und
+„Erase now“ in `admin/customer.php`, Löschanträge in `admin/requests.php`.
+Upload-Limits: `portal/.user.ini` (9M/20M) – bei mod_php `upload_max_filesize=9M`, `post_max_size=20M` in der Server-Konfiguration setzen.
+
 ## Verzeichnisse
 ```
 app/                  Code (per .htaccess gesperrt). bootstrap.php lädt app/lib/*.php

@@ -127,7 +127,7 @@ function account_erase(int $userId, string $initiator): array
         }
     } catch (Throwable $e) {
         error_log('account_erase(' . $userId . ') stopped: ' . $e->getMessage());
-        return $fail('error', __('The deletion could not be completed because a storage system did not answer. Nothing else was deleted; please try again in a few minutes or contact us.'));
+        return $fail('error', __('The deletion could not be completed because a storage system did not answer. Parts of your data may already have been deleted, the rest is still there. Please try again in a few minutes (it is safe to retry) or contact us.'));
     }
 
     $notifyRef = $open !== null ? (int) $open['id'] : 0;
