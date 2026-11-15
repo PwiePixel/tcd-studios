@@ -156,9 +156,16 @@ function vault_prepare_image(array $file): array
         throw new InvalidArgumentException(__('The upload failed. Please try again.'));
     }
     $info = @getimagesize($tmp);
-    if ($info === false || !in_array($info[2], [IMAGETYPE_JPEG, IMAGETYPE_PNG, IMAGETYPE_WEBP], true) || $info[0] < 400 || $info[1] < 250
-        || $info[0] > 12000 || $info[1] > 12000) {
+    if ($info === false || !in_array($info[2], [IMAGETYPE_JPEG, IMAGETYPE_PNG, IMAGETYPE_WEBP], true) || $info[0] < 400 || $info[1] < 250) {
         throw new InvalidArgumentException(__('Please upload a clear JPEG, PNG or WebP photo (at least 400 × 250 pixels).'));
+    }
+    // Decoding needs roughly 5 bytes per pixel: refuse what the server cannot process instead of dying with a fatal error.
+    $pixels = (int) $info[0] * (int) $info[1];
+    @ini_set('memory_limit', '512M');
+    $limit = ini_get('memory_limit');
+    $bytes = $limit === '-1' ? PHP_INT_MAX : (int) $limit * (stripos((string) $limit, 'G') !== false ? 1073741824 : (stripos((string) $limit, 'K') !== false ? 1024 : 1048576));
+    if ($pixels > 50000000 || $pixels * 5 + 64 * 1048576 > $bytes) {
+        throw new InvalidArgumentException(__('The image is too large to process. Please reduce its size (for example to 12 megapixels) and try again.'));
     }
     $raw = file_get_contents($tmp);
     $img = $raw === false ? false : @imagecreatefromstring($raw);
