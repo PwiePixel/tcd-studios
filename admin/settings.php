@@ -13,6 +13,7 @@ function admin_management_fields(): array
         'name' => __('Name of the management'), 'street' => __('Street'), 'city' => __('Postcode, city and country'),
         'phone' => __('Phone'), 'email' => __('E-mail'), 'website' => __('Website'), 'legal_form' => __('Legal form'),
         'chamber' => __('Chamber / association'), 'authority' => __('Supervisory authority'), 'regulations_url' => __('Link to the regulations (professional rules)'),
+        'notice' => __('Important notice about the address'),
     ];
 }
 

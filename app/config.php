@@ -52,5 +52,6 @@ return [
         'chamber'        => 'Member of the Austrian Economic Chamber (WKO)',
         'authority'      => 'Municipal District Office of Graz',
         'regulations_url' => 'https://www.ris.bka.gv.at',
+        'notice'         => 'This address is strictly for official authorities and regulatory matters only. No packages or general mail will be accepted.',
     ],
 ];

@@ -98,6 +98,9 @@ function site_imprint_blocks(array $profile, array $public): array
         $mgmt[] = ['t', ['Website: ', site_imprint_link($m['website'])]];
     }
     $blocks[] = $mgmt;
+    if ($m['notice'] !== '') {
+        $blocks[] = [['h', 'Important Notice:'], ['t', $m['notice']]];
+    }
 
     $contact = mb_strtolower(trim((string) ($public['contact_email'] ?? '')), 'UTF-8');
     if (!empty($public['show_contact_email']) && v_email($contact)) {

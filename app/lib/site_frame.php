@@ -119,7 +119,7 @@ function site_management(): array
     }
     $defaults = [
         'name' => 'TCD-Studio/Agency', 'street' => '', 'city' => '', 'phone' => '', 'email' => '', 'website' => '',
-        'legal_form' => '', 'chamber' => '', 'authority' => '', 'regulations_url' => '',
+        'legal_form' => '', 'chamber' => '', 'authority' => '', 'regulations_url' => '', 'notice' => '',
     ];
     $out = [];
     foreach ($defaults as $k => $d) {
