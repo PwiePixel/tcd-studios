@@ -3,6 +3,7 @@
  * @var array<string,mixed> $user
  * @var array<int,array<string,mixed>> $rows @var bool $canCreate @var int $maxProfiles @var array<int,array<string,mixed>> $requests
  * @var bool $termsAccepted @var array{version:?string,at:?int,current:bool} $termsInfo
+ * @var array{status:string,created_at:?int,link_until:?int,link_valid:bool,legal_hold:bool} $termination
  */
 defined('TCD_APP') || exit;
 ?>
@@ -17,11 +18,25 @@ defined('TCD_APP') || exit;
 </div>
 <?php endif; ?>
 
+<?php if ($termination['status'] !== 'none'): ?>
+<div class="pf-notice pf-notice--danger" id="termination-notice">
+<?php if ($termination['status'] === 'on_hold'): ?>
+  <strong><?= h(__('Your deletion request is on hold.')) ?></strong>
+  <?= h(__('We are legally required to keep some of your data for now. It is deleted as soon as the reason no longer applies.')) ?>
+<?php else: ?>
+  <strong><?= h(__('You asked to end the service.')) ?></strong>
+  <?= h(__('We mailed you a confirmation link. Nothing is deleted until you open it and confirm.')) ?>
+<?php endif; ?>
+  <div class="pf-actions pf-actions--tight"><a class="pf-btn pf-btn--small" href="/portal/terminate.php"><?= h(__('Details')) ?></a></div>
+</div>
+<?php endif; ?>
+
 <div class="pf-notice pf-notice--info">
   <strong><?= h(__('How Imprint Protection works')) ?></strong>
   <ul class="pf-list">
     <li><?= h(__('Your imprint is published under tcd-studio.de/legal/<page name>/ with the management address of TCD-Studio/Agency instead of your private address.')) ?></li>
     <li><?= h(__('Your private details (legal name and address) stay private: they are never published and only you and our team can see them.')) ?></li>
+    <li><?= h(__('You confirm your name and address once with a photo of your ID card. It is encrypted when you upload it, only authorised staff can open it for the check, and afterwards it is stored only encrypted on a separate secure storage until you end the service.')) ?></li>
     <li><?= h(__('You choose what is shown publicly: your purpose text, your links and, if you want, a contact e-mail address.')) ?></li>
     <li><?= h(__('Nothing goes live without approval: every new version is checked by our team first. Until then, the current version stays online.')) ?></li>
   </ul>
@@ -44,6 +59,7 @@ defined('TCD_APP') || exit;
           <th><?= h(__('Public name')) ?></th>
           <th><?= h(__('Page name')) ?></th>
           <th><?= h(__('Status')) ?></th>
+          <th><?= h(__('Identity check')) ?></th>
           <th><?= h(__('Live page')) ?></th>
           <th></th>
         </tr>
@@ -62,6 +78,12 @@ defined('TCD_APP') || exit;
               <div class="pf-muted pf-small"><?= h(__('You have an unsubmitted draft.')) ?></div>
             <?php elseif ($p['status'] === 'draft' && $row['open'] === null): ?>
               <div class="pf-muted pf-small"><?= h(__('Changes were requested – see the details.')) ?></div>
+            <?php endif; ?>
+          </td>
+          <td class="pf-identity-cell">
+            <?= portal_identity_badge_html((string) $row['identity']['step']) ?>
+            <?php if ($row['identity']['attention']): ?>
+              <div><a class="pf-btn pf-btn--small pf-btn--primary" href="/portal/identity.php?id=<?= (int) $p['id'] ?>"><?= h(__('Upload ID photo')) ?></a></div>
             <?php endif; ?>
           </td>
           <td>

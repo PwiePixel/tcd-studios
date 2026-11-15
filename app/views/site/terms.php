@@ -121,8 +121,12 @@ defined('TCD_APP') || exit;
             <h3>§ 4 Obligations of the Customer</h3>
             <ol>
               <li>The Customer provides truthful, complete and up-to-date details (in particular regarding name and address) and
-                updates them without undue delay when they change. On request, the Customer proves his or her identity and address by
-                suitable evidence.</li>
+                updates them without undue delay when they change. The Customer proves his or her identity and address by a photo of
+                his or her ID card (front and back), which the Customer uploads through the encrypted form in the customer portal.
+                This proof must be provided before the imprint page is first published and again whenever the name or address
+                changes. The Provider may require further evidence where necessary. The Customer may cover details on the ID card
+                that are not needed for the check (for example the photo, the document number or the access number); the name and
+                the address must remain legible. The handling of the ID-card photo is governed by § 5.</li>
               <li>The Customer is solely responsible for the content of his or her channels, websites and publications and for the
                 links provided by the Customer. Links may lead only to pages and channels that the Customer operates himself or herself or
                 is entitled to use.</li>
@@ -152,16 +156,32 @@ defined('TCD_APP') || exit;
                 maintenance of the imprint page, communication, prevention of abuse and compliance with legal obligations. Details
                 are set out in the <a href="/privacy/">Privacy Policy</a>. The Customer directs data protection enquiries to
                 <a href="mailto:<?= h($p['mail_privacy']) ?>"><?= h($p['mail_privacy']) ?></a>.</li>
-              <li>The Customer’s private data (identity, address) are not published. Access is limited to the Provider and the
-                service providers engaged by the Provider, to the extent necessary for operation.</li>
+              <li>The Customer’s private data (identity, address) are not published. The address data are stored in encrypted form.
+                Access is limited to the Provider and the service providers engaged by the Provider, to the extent necessary for
+                operation.</li>
               <li><strong>Imprint Protection means protection against publication of the private address, not anonymity towards
                 authorities or courts.</strong> The Customer acknowledges that the Provider may disclose the identity and address data
                 on file to authorities and courts and – where a statutory right to information or a legitimate interest exists,
                 for example in the case of alleged infringements of rights – to third parties, to the extent that this is
                 required by law or ordered by an authority or a court, as the case may be. The Provider informs the Customer of this
                 to the extent permitted.</li>
-              <li>The Provider stores the data for the duration of the contract. Thereafter the data are blocked and deleted as soon as
-                they are no longer needed to comply with legal obligations or to assert or defend legal claims.</li>
+              <li><strong>ID-card photo:</strong> The photo is transmitted over an encrypted connection (HTTPS) and is encrypted
+                immediately upon upload with a public key. The matching private key is not stored on any server; the web server
+                therefore cannot read the photo after the upload. Authorised persons of the Provider decrypt the photo solely for
+                the check, in their own browser, and compare it with the details entered by the Customer. After the check the
+                photo is deleted from the web server; it is kept only in encrypted form on a separate, access-restricted storage
+                system until the Service ends.</li>
+              <li><strong>Purpose of storage:</strong> The Provider supplies the Customer only with the management address (mailbox)
+                and protection against publication of the private address. If abuse occurs, for example unlawful content, claims
+                of third parties or requests from authorities, the Provider must be able to name the responsible person. For this
+                reason the Provider stores the identity and address data and the ID-card photo; disclosure is governed by
+                para. 3.</li>
+              <li>The Provider stores the address data and the ID-card photo for as long as the Service is used. When the Service
+                ends, they are deleted in accordance with § 7 paras. 6 and 7.</li>
+              <li><strong>Legal hold:</strong> Where a reason exists that obliges or entitles the Provider to retain data (for
+                example an open legal claim, a request from an authority or a statutory retention duty), the Provider may suspend
+                the deletion of the data concerned. The data are then kept only for that reason and are deleted as soon as the
+                reason no longer applies. The Customer is informed of this to the extent permitted.</li>
             </ol>
           </section>
 
@@ -184,9 +204,16 @@ defined('TCD_APP') || exit;
             <h3>§ 7 Term, Termination, Suspension</h3>
             <ol>
               <li>The contract is concluded for an indefinite period.</li>
-              <li>The Customer may terminate the contract at any time, for example by taking his or her imprint page offline in the
-                customer portal and notifying the Provider by e-mail to <a href="mailto:<?= h($p['mail_imprint']) ?>"><?= h($p['mail_imprint']) ?></a>. Fees already
-                paid for current billing periods are not refunded pro rata, to the extent permitted by law.</li>
+              <li><strong>Ending by the Customer:</strong> The Customer may end the contract at any time. To do so, the Customer
+                requests the end of the Service in the customer portal. This creates a deletion request in the Provider’s system,
+                and the Provider sends the Customer a time-limited confirmation link by e-mail. The Customer confirms the deletion
+                request via this link and thereby declares that the Service ends, that all of his or her data will be deleted
+                irrevocably and that he or she may no longer use the Service afterwards. The contract ends with the confirmation,
+                the imprint page is taken offline immediately, and the Customer’s data are deleted in accordance with para. 6.
+                Without confirmation nothing changes; merely taking the imprint page offline ends neither the contract nor the
+                storage of the data. Termination in text form (for example by e-mail to
+                <a href="mailto:<?= h($p['mail_imprint']) ?>"><?= h($p['mail_imprint']) ?></a>) remains possible; para. 7 then applies to the deletion of the data.
+                Fees already paid for current billing periods are not refunded pro rata, to the extent permitted by law.</li>
               <li>The Provider may terminate the contract by giving 14 days’ notice. The imprint page remains online until the end of the
                 notice period.</li>
               <li>The right of both parties to terminate for good cause remains unaffected. Good cause exists for the
@@ -195,7 +222,18 @@ defined('TCD_APP') || exit;
                 and late payment despite a reminder. In these cases the Provider may take the imprint page offline or
                 suspend it immediately and suspend the account. The Customer is informed of this to the extent permitted.</li>
               <li>When the contract ends, the imprint page is taken offline. The Customer ensures in good time that his or her channels
-                use another proper imprint.</li>
+                use another proper imprint. After the contract has ended, the Customer may no longer use the Service.</li>
+              <li><strong>Deletion after confirmation by the Customer:</strong> Upon the confirmation under para. 2, the Provider
+                deletes all of the Customer’s data automatically and irrevocably, namely the imprint page, the address data, the
+                ID-card photos (on the web server and on the storage system under § 5 para. 4), the imprint profiles with all
+                versions, the requests and the customer account. Log entries are kept only in pseudonymised form (without name and
+                e-mail address); in addition, a deletion record without personal reference (date and number of the deleted records)
+                is kept. Backup copies are overwritten in the regular backup cycle. A legal hold under § 5 para. 7 remains
+                reserved; deletion then takes place as soon as the reason no longer applies.</li>
+              <li><strong>Deletion upon other termination:</strong> If the contract ends in another way (in particular by
+                termination by the Provider or by termination by the Customer in text form without a deletion request under
+                para. 2), the Provider deletes the Customer’s data after the end of the contract as soon as they are no longer needed
+                to comply with legal obligations or to assert or defend legal claims (§ 5 para. 7).</li>
             </ol>
           </section>
 

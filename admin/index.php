@@ -17,5 +17,6 @@ render_view('admin/index', [
     'pending' => $pending,
     'requests' => $requests,
     'problems' => $problems,
+    'vaultNotices' => admin_vault_notices(),
     'noTotp' => !admin_totp_active($admin),
 ]);

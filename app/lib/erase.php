@@ -134,8 +134,17 @@ function account_erase(int $userId, string $initiator): array
     db_transaction(static function () use ($userId, &$counts, $notifyRef, $initiator) {
         $counts['revisions'] = (int) (db_one('SELECT COUNT(*) AS n FROM revisions WHERE profile_id IN (SELECT id FROM profiles WHERE owner_id = ?)', [$userId])['n'] ?? 0);
         $counts['requests'] = db_exec('DELETE FROM service_requests WHERE user_id = ?', [$userId]);
-        db_exec('UPDATE audit_log SET actor_label = ? WHERE actor_id = ?', ['erased-user#' . $userId, $userId]);
-        db_exec('UPDATE audit_log SET target_id = NULL WHERE target_type = \'user\' AND target_id = ?', [(string) $userId]);
+        // Pseudonymise the audit log: no name/e-mail, no IP address and no details (page names) for rows about this person.
+        $profileIds = array_map(static function ($r) { return (string) $r['id']; }, db_all('SELECT id FROM profiles WHERE owner_id = ?', [$userId]));
+        $revisionIds = array_map(static function ($r) { return (string) $r['id']; }, db_all('SELECT id FROM revisions WHERE profile_id IN (SELECT id FROM profiles WHERE owner_id = ?)', [$userId]));
+        $fileIds = array_map(static function ($r) { return (string) $r['id']; }, db_all('SELECT f.id FROM identity_files f JOIN identity_requests r ON r.id = f.request_id WHERE r.user_id = ?', [$userId]));
+        db_exec('UPDATE audit_log SET actor_label = ?, ip = \'\', meta_json = \'{}\' WHERE actor_id = ?', ['erased-user#' . $userId, $userId]);
+        db_exec('UPDATE audit_log SET target_id = NULL, meta_json = \'{}\' WHERE target_type = \'user\' AND target_id = ?', [(string) $userId]);
+        foreach (['profile' => $profileIds, 'revision' => $revisionIds, 'identity_file' => $fileIds] as $type => $ids) {
+            foreach ($ids as $tid) {
+                db_exec('UPDATE audit_log SET target_id = NULL, meta_json = \'{}\' WHERE target_type = ? AND target_id = ?', [$type, $tid]);
+            }
+        }
         db_exec('DELETE FROM profiles WHERE owner_id = ?', [$userId]);            // revisions + identity rows cascade
         db_exec('DELETE FROM identity_requests WHERE user_id = ?', [$userId]);
         if ($notifyRef > 0) {
@@ -156,4 +165,29 @@ function account_erase(int $userId, string $initiator): array
         $name
     ));
     return ['ok' => true, 'status' => 'completed', 'error' => '', 'counts' => $counts];
+}
+
+/**
+ * Set or release the legal hold of a customer (admin action; the caller audits it).
+ * Releasing a hold runs a deletion that was waiting for it automatically (the customer had already confirmed).
+ *
+ * @return array{ok:bool,status:string,error:string,erased:bool} status: held | released | completed | error
+ */
+function legal_hold_set(int $userId, bool $on, string $note = ''): array
+{
+    $user = user_get($userId);
+    if ($user === null || $user['role'] !== 'customer') {
+        return ['ok' => false, 'status' => 'error', 'error' => __('Customer not found.'), 'erased' => false];
+    }
+    db_exec('UPDATE users SET legal_hold = ?, legal_hold_note = ? WHERE id = ?', [$on ? 1 : 0, $on ? mb_substr(trim($note), 0, 500, 'UTF-8') : '', $userId]);
+    if ($on) {
+        return ['ok' => true, 'status' => 'held', 'error' => '', 'erased' => false];
+    }
+    $waiting = db_one('SELECT id FROM deletion_requests WHERE user_id = ? AND status = \'on_hold\' AND confirmed_at IS NOT NULL ORDER BY id DESC LIMIT 1', [$userId]);
+    if ($waiting === null) {
+        return ['ok' => true, 'status' => 'released', 'error' => '', 'erased' => false];
+    }
+    audit('erase.after_hold_release', 'deletion_request', (int) $waiting['id'], []);
+    $res = account_erase($userId, 'customer');
+    return ['ok' => $res['ok'], 'status' => $res['ok'] ? 'completed' : 'error', 'error' => $res['error'], 'erased' => $res['ok']];
 }

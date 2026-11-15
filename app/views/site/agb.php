@@ -116,8 +116,12 @@ defined('TCD_APP') || exit;
             <h3>§ 4 Pflichten des Kunden</h3>
             <ol>
               <li>Der Kunde macht wahrheitsgemäße, vollständige und aktuelle Angaben (insbesondere zu Name und Anschrift) und
-                aktualisiert sie unverzüglich bei Änderungen. Auf Verlangen weist er seine Identität und Anschrift mit einem
-                geeigneten Nachweis nach.</li>
+                aktualisiert sie unverzüglich bei Änderungen. Er weist seine Identität und Anschrift durch ein Foto seines
+                Ausweises (Vorder- und Rückseite) nach, das er über das verschlüsselte Formular im Kundenportal hochlädt. Dieser
+                Nachweis ist vor der ersten Veröffentlichung der Impressumsseite und erneut bei jeder Änderung von Name oder
+                Anschrift zu erbringen. Der Anbieter kann bei Bedarf weitere Nachweise verlangen. Angaben auf dem Ausweis, die
+                für die Prüfung nicht erforderlich sind (zum Beispiel Foto, Dokumentnummer, Zugangsnummer), kann der Kunde
+                abdecken; Name und Anschrift müssen lesbar bleiben. Die Behandlung des Ausweisfotos regelt § 5.</li>
               <li>Der Kunde ist allein verantwortlich für die Inhalte seiner Kanäle, Websites und Veröffentlichungen sowie für die
                 von ihm angegebenen Links. Links dürfen nur auf Seiten und Kanäle führen, die der Kunde selbst betreibt oder zu deren
                 Verwendung er berechtigt ist.</li>
@@ -147,16 +151,33 @@ defined('TCD_APP') || exit;
                 der Impressumsseite, zur Kommunikation, zur Abwehr von Missbrauch und zur Erfüllung rechtlicher Pflichten. Einzelheiten
                 enthält die <a href="/privacy/">Datenschutzerklärung</a>. Anfragen zum Datenschutz richtet der Kunde an
                 <a href="mailto:<?= h($p['mail_privacy']) ?>"><?= h($p['mail_privacy']) ?></a>.</li>
-              <li>Die privaten Daten des Kunden (Identität, Anschrift) werden nicht veröffentlicht. Zugriff haben nur der Anbieter und
-                von ihm eingesetzte Dienstleister, soweit dies für den Betrieb erforderlich ist.</li>
+              <li>Die privaten Daten des Kunden (Identität, Anschrift) werden nicht veröffentlicht. Die Anschriftsdaten werden
+                verschlüsselt gespeichert. Zugriff haben nur der Anbieter und von ihm eingesetzte Dienstleister, soweit dies für
+                den Betrieb erforderlich ist.</li>
               <li><strong>Impressumsschutz bedeutet Schutz vor der Veröffentlichung der Privatanschrift, nicht Anonymität gegenüber
                 Behörden oder Gerichten.</strong> Der Kunde nimmt zur Kenntnis, dass der Anbieter die hinterlegten Identitäts- und
                 Anschriftsdaten Behörden und Gerichten sowie – bei Vorliegen eines gesetzlichen Auskunftsanspruchs oder eines
                 berechtigten Interesses, etwa bei behaupteten Rechtsverletzungen – Dritten offenlegen darf, soweit dies gesetzlich
                 erforderlich oder behördlich beziehungsweise gerichtlich angeordnet ist. Der Anbieter informiert den Kunden darüber,
                 soweit dies zulässig ist.</li>
-              <li>Der Anbieter speichert die Daten während der Vertragsdauer. Danach werden sie gesperrt und gelöscht, sobald sie weder
-                zur Erfüllung gesetzlicher Pflichten noch zur Durchsetzung oder Abwehr von Rechtsansprüchen benötigt werden.</li>
+              <li><strong>Ausweisfoto:</strong> Das Foto wird über eine verschlüsselte Verbindung (HTTPS) übertragen und beim
+                Hochladen sofort mit einem öffentlichen Schlüssel verschlüsselt. Der zugehörige private Schlüssel liegt auf
+                keinem Server; der Webserver kann das Foto nach dem Hochladen daher nicht mehr lesen. Berechtigte Personen des
+                Anbieters entschlüsseln das Foto ausschließlich zur Prüfung in ihrem eigenen Browser und vergleichen es mit den
+                vom Kunden eingegebenen Angaben. Nach der Prüfung wird das Foto vom Webserver gelöscht; es wird nur noch
+                verschlüsselt auf einem getrennten, zugriffsgeschützten Speichersystem aufbewahrt, bis der Dienst endet.</li>
+              <li><strong>Zweck der Speicherung:</strong> Der Anbieter stellt dem Kunden nur die Management-Adresse (Postfach) und
+                den Schutz vor der Veröffentlichung der Privatanschrift bereit. Kommt es zu Missbrauch, etwa zu rechtswidrigen
+                Inhalten, zu Ansprüchen Dritter oder zu Anfragen von Behörden, muss der Anbieter die verantwortliche Person
+                benennen können. Deshalb speichert er die Identitäts- und Anschriftsdaten und das Ausweisfoto; die Offenlegung
+                richtet sich nach Abs. 3.</li>
+              <li>Der Anbieter speichert die Anschriftsdaten und das Ausweisfoto, solange der Dienst genutzt wird. Mit dem Ende des
+                Dienstes werden sie nach Maßgabe von § 7 Abs. 6 und 7 gelöscht.</li>
+              <li><strong>Legal Hold:</strong> Besteht ein Grund, der den Anbieter zur Aufbewahrung von Daten verpflichtet oder
+                berechtigt (zum Beispiel ein offener Rechtsanspruch, eine Anfrage einer Behörde oder eine gesetzliche
+                Aufbewahrungspflicht), kann der Anbieter die Löschung der betroffenen Daten aussetzen. Die Daten werden dann nur
+                für diesen Grund aufbewahrt und gelöscht, sobald der Grund nicht mehr besteht. Der Kunde wird darüber informiert,
+                soweit dies zulässig ist.</li>
             </ol>
           </section>
 
@@ -179,9 +200,16 @@ defined('TCD_APP') || exit;
             <h3>§ 7 Laufzeit, Kündigung, Sperre</h3>
             <ol>
               <li>Der Vertrag wird auf unbestimmte Zeit geschlossen.</li>
-              <li>Der Kunde kann den Vertrag jederzeit kündigen, zum Beispiel durch Offline-Nehmen seiner Impressumsseite im Kundenportal
-                und Mitteilung per E-Mail an <a href="mailto:<?= h($p['mail_imprint']) ?>"><?= h($p['mail_imprint']) ?></a>. Bereits bezahlte Entgelte für
-                laufende Abrechnungszeiträume werden, soweit gesetzlich zulässig, nicht anteilig erstattet.</li>
+              <li><strong>Beendigung durch den Kunden:</strong> Der Kunde kann den Vertrag jederzeit beenden. Dazu beantragt er im
+                Kundenportal das Ende des Dienstes. Damit entsteht im System des Anbieters ein Löschantrag, und der Anbieter
+                sendet dem Kunden per E-Mail einen befristet gültigen Bestätigungslink. Der Kunde bestätigt den Löschantrag über
+                diesen Link und erklärt damit, dass der Dienst endet, dass alle seine Daten unwiderruflich gelöscht werden und dass
+                er den Dienst danach nicht mehr nutzen darf. Mit der Bestätigung endet der Vertrag, die Impressumsseite wird sofort
+                offline genommen, und die Daten des Kunden werden nach Abs. 6 gelöscht. Ohne Bestätigung ändert sich nichts; das
+                bloße Offline-Nehmen der Impressumsseite beendet weder den Vertrag noch die Speicherung der Daten. Eine Kündigung in
+                Textform (zum Beispiel per E-Mail an <a href="mailto:<?= h($p['mail_imprint']) ?>"><?= h($p['mail_imprint']) ?></a>) bleibt möglich; für die Löschung
+                der Daten gilt dann Abs. 7. Bereits bezahlte Entgelte für laufende Abrechnungszeiträume werden, soweit gesetzlich
+                zulässig, nicht anteilig erstattet.</li>
               <li>Der Anbieter kann den Vertrag mit einer Frist von 14 Tagen kündigen. Die Impressumsseite bleibt bis zum Ende der
                 Kündigungsfrist online.</li>
               <li>Das Recht beider Seiten zur Kündigung aus wichtigem Grund bleibt unberührt. Ein wichtiger Grund liegt für den
@@ -190,7 +218,18 @@ defined('TCD_APP') || exit;
                 und bei Zahlungsverzug trotz Mahnung. In diesen Fällen darf der Anbieter die Impressumsseite sofort offline nehmen
                 oder sperren und das Konto sperren. Der Kunde wird darüber informiert, soweit dies zulässig ist.</li>
               <li>Mit Vertragsende wird die Impressumsseite offline genommen. Der Kunde sorgt rechtzeitig dafür, dass seine Kanäle ein
-                anderes ordnungsgemäßes Impressum verwenden.</li>
+                anderes ordnungsgemäßes Impressum verwenden. Nach Vertragsende darf der Kunde den Dienst nicht mehr nutzen.</li>
+              <li><strong>Löschung nach Bestätigung durch den Kunden:</strong> Mit der Bestätigung nach Abs. 2 löscht der Anbieter alle
+                Daten des Kunden automatisch und unwiderruflich, nämlich die Impressumsseite, die Anschriftsdaten, die Ausweisfotos
+                (auf dem Webserver und auf dem Speichersystem nach § 5 Abs. 4), die Impressum-Profile mit allen Versionen, die
+                Anfragen und das Kundenkonto. Protokolleinträge bleiben nur in pseudonymisierter Form (ohne Name und E-Mail-Adresse)
+                erhalten; zusätzlich bleibt ein Löschnachweis ohne Personenbezug (Datum und Anzahl der gelöschten Datensätze)
+                bestehen. Sicherungskopien werden im regelmäßigen Sicherungszyklus überschrieben. Ein Legal Hold nach § 5 Abs. 7
+                bleibt vorbehalten; die Löschung erfolgt dann, sobald der Grund nicht mehr besteht.</li>
+              <li><strong>Löschung bei anderer Beendigung:</strong> Endet der Vertrag auf andere Weise (insbesondere durch Kündigung
+                des Anbieters oder durch Kündigung des Kunden in Textform ohne Löschantrag nach Abs. 2), löscht der Anbieter die
+                Daten des Kunden nach dem Vertragsende, sobald sie weder zur Erfüllung gesetzlicher Pflichten noch zur
+                Durchsetzung oder Abwehr von Rechtsansprüchen benötigt werden (§ 5 Abs. 7).</li>
             </ol>
           </section>
 

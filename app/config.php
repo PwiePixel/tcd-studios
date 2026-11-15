@@ -25,7 +25,7 @@ return [
 
     // Version of the Terms and Conditions (AGB). Bump it whenever /agb/ changes in a way customers must accept again;
     // customers are asked to accept the current version before they create or submit an imprint.
-    'terms_version' => '2026-11-15',
+    'terms_version' => '2026-11-16',
 
     // Identity vault (ID photos): encrypted on upload with the PUBLIC key set in the admin panel (the private key never
     // touches a server), then moved to the archive; the web server copy is deleted.

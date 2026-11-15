@@ -28,3 +28,21 @@
   .pf-link-list li { flex-direction: column; align-items: flex-start; }
   .pf-card { padding: 18px; }
 }
+
+/* Identity check (ID photo upload) and ending the service */
+.pf-notice--danger { background: #fdecea; border-left-color: #c0392b; }
+.pf-grid--identity { display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); gap: 24px; align-items: start; }
+.pf-field input[type=file] { display: block; width: 100%; font: inherit; font-size: .9rem; padding: 10px; border: 1px dashed #999; border-radius: var(--pf-radius); background: #fafafa; }
+.pf-field input[type=file]::file-selector-button { font: inherit; font-size: .8rem; text-transform: uppercase; padding: 5px 14px; margin-right: 12px; border: 1px solid #000; background: #fff; border-radius: var(--pf-radius); cursor: pointer; }
+.pf-field input[type=file][aria-invalid=true] { border-color: #c0392b; background: #fff7f6; }
+.pf-steps { margin: 0 0 14px; padding-left: 1.3rem; }
+.pf-steps > li { margin-bottom: 12px; }
+.pf-steps > li:last-child { margin-bottom: 0; }
+.pf-steps .pf-list { margin-top: 6px; }
+.pf-identity-cell .pf-btn { margin-top: 6px; }
+#privacy h2 { margin-bottom: .4rem; }
+#identity-files td { vertical-align: middle; }
+
+@media (max-width: 800px) {
+  .pf-grid--identity { grid-template-columns: minmax(0, 1fr); }
+}

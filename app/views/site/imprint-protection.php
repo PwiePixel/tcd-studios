@@ -99,6 +99,14 @@ defined('TCD_APP') || exit;
                 Your legal name, your address, your phone number, your VAT ID and your notes are only visible to you
                 and to our team. They are used to verify your identity and are never shown in your imprint.
               </p>
+              <p>
+                To check your identity we ask for a photo of your ID card (front and back). You upload it through an
+                encrypted form: the photo is encrypted immediately with a key that is not stored on our web server, so
+                the server cannot read it afterwards. After the check it is deleted from the web server and kept only in
+                encrypted form on a separate, access-restricted storage system until your service ends. When you end the
+                service, all your data is deleted automatically and irrevocably. Details are in our
+                <a href="/privacy/#imprint-protection">privacy policy</a>.
+              </p>
             </div>
           </div>
 
@@ -174,6 +182,26 @@ defined('TCD_APP') || exit;
                 <p>
                   Only your public name, the type of your account, your purpose text, the links you add and, if you
                   choose so, a contact e-mail address. Your address and other identity details are not published.
+                </p>
+              </details>
+              <details>
+                <summary>What happens to my ID-card photo?</summary>
+                <p>
+                  You upload it through an encrypted form and it is encrypted immediately with a key that is not stored
+                  on our web server. Our team opens it only to check your identity and address. After the check it is
+                  deleted from the web server and kept only in encrypted form on a separate, access-restricted storage
+                  system until your service ends. We need these data so that we can name the responsible person if an
+                  imprint page is misused; see our <a href="/privacy/#imprint-protection">privacy policy</a>.
+                </p>
+              </details>
+              <details>
+                <summary>What happens to my data when I end the service?</summary>
+                <p>
+                  You ask to end the service in the customer area and confirm the link we send you by e-mail. Your imprint
+                  page then goes offline and all your data, including the ID-card photo, is deleted automatically and
+                  irrevocably. Only if a legal reason requires us to keep data (for example an open claim or a request
+                  from an authority) does the deletion wait until that reason no longer applies. See our
+                  <a href="/privacy/#imprint-protection">privacy policy</a>.
                 </p>
               </details>
               <details>

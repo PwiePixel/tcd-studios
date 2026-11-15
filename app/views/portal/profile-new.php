@@ -15,6 +15,11 @@ defined('TCD_APP') || exit;
     <a href="/shops/"><?= h(__('Request it for your shop')) ?></a>.
   </div>
   <p class="pf-muted"><?= h(__('First choose how your imprint is called and where it will be published. In the next step you add your details, links and private information.')) ?></p>
+  <div class="pf-notice pf-notice--info" id="identity-hint">
+    <strong><?= h(__('Good to know: you will need a photo of your ID card.')) ?></strong>
+    <?= h(__('Before your first submission we ask for a photo of your ID card (front and back) to verify your name and address. It is encrypted when you upload it, only authorised staff can open it for the check, and afterwards it is stored only encrypted on a separate secure storage until you end the service.')) ?>
+    <a href="/privacy/"><?= h(__('Privacy Policy')) ?></a>
+  </div>
   <form class="pf-form" method="post" action="/portal/profile-new.php">
     <?= csrf_field() ?>
     <div class="pf-field">

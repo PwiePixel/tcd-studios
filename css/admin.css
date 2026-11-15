@@ -55,3 +55,29 @@
 
 /* Grid items may shrink below their content width (wide tables scroll inside .pf-table-wrap instead of the page) */
 .pf-grid > * { min-width: 0; }
+
+/* ---- Identity vault (admin/vault.php, admin/identity.php, js/vault.js) ---- */
+[hidden] { display: none !important; }
+.pf-notice--danger { background: #fdeceb; border-left-color: #c0392b; border: 1px solid #f0b8b2; border-left-width: 5px; }
+.pf-notice--danger ul { margin: .5rem 0 0; }
+.pf-notice--danger li + li { margin-top: .35rem; }
+.pf-card--warn { border-top: 3px solid #f0b429; }
+.pf-card--danger { border-top: 3px solid #c0392b; background: #fffafa; }
+.pf-fieldset--warn { border-color: #f0b429; background: #fffdf5; }
+.pf-code { background: #111; color: #eee; padding: 10px 14px; border-radius: var(--pf-radius); overflow-x: auto; margin: 0 0 14px; font-size: .82rem; }
+.pf-field textarea.pf-mono { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: .8rem; line-height: 1.4; }
+.pf-fp { font-size: .8rem; word-break: break-all; background: #f2f2f2; padding: 2px 6px; border-radius: 3px; }
+.pf-tabs { margin-top: 0; }
+.pf-tabs a .pf-badge { margin-left: 4px; text-transform: none; }
+
+/* Decrypted ID photos: exist only as blob: URLs in the browser */
+.pf-idgrid { margin-top: 12px; align-items: start; }
+.pf-idfig { margin: 0; border: 1px solid var(--pf-line); border-radius: var(--pf-radius); padding: 12px; background: #fafafa; }
+.pf-idfig figcaption { font-weight: 700; text-transform: uppercase; font-size: .8rem; color: var(--pf-muted); margin-bottom: 8px; }
+.pf-zoom { display: block; width: 100%; padding: 0; border: 0; background: none; cursor: zoom-in; }
+.pf-idimg { display: block; width: 100%; height: auto; border: 1px solid #ccc; background: #fff; }
+.pf-idfig.is-zoomed { position: fixed; top: 0; right: 0; bottom: 0; left: 0; z-index: 1000; margin: 0; padding: 16px; border: 0; border-radius: 0; background: rgba(0, 0, 0, .9); display: flex; align-items: center; justify-content: center; }
+.pf-idfig.is-zoomed figcaption { display: none; }
+.pf-idfig.is-zoomed [data-vault-slot] { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; }
+.pf-idfig.is-zoomed .pf-zoom { width: auto; max-width: 100%; max-height: 100%; cursor: zoom-out; }
+.pf-idfig.is-zoomed .pf-idimg { width: auto; max-width: 96vw; max-height: 94vh; }

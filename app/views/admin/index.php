@@ -1,7 +1,7 @@
 <?php
 /**
  * @var array<string,mixed> $admin @var array<string,int> $stats @var array<int,array<string,mixed>> $pending
- * @var array<int,array<string,mixed>> $requests @var int $problems @var bool $noTotp
+ * @var array<int,array<string,mixed>> $requests @var int $problems @var bool $noTotp @var array<int,array{text:string,href:string,link:string}> $vaultNotices
  */
 defined('TCD_APP') || exit;
 ?>
@@ -18,11 +18,30 @@ defined('TCD_APP') || exit;
     <a href="/admin/settings.php#system-checks"><?= h(__('Open the system checks')) ?></a></div>
 <?php endif; ?>
 
+<?php foreach ($vaultNotices as $n): ?>
+  <div class="pf-notice pf-notice--warn"><strong><?= h($n['text']) ?></strong> <a href="<?= h($n['href']) ?>"><?= h($n['link']) ?></a></div>
+<?php endforeach; ?>
+<?php if ($stats['deletions_hold'] > 0): ?>
+  <div class="pf-notice pf-notice--warn"><strong><?= h(sprintf(__('%d deletion request(s) are on hold because of a legal hold.'), (int) $stats['deletions_hold'])) ?></strong>
+    <a href="/admin/requests.php?tab=deletions&amp;dstatus=on_hold"><?= h(__('Show them')) ?></a></div>
+<?php endif; ?>
+<?php if ($stats['deletions_open'] > 0): ?>
+  <div class="pf-notice"><strong><?= h(sprintf(__('%d open deletion request(s).'), (int) $stats['deletions_open'])) ?></strong>
+    <a href="/admin/requests.php?tab=deletions"><?= h(__('Show them')) ?></a></div>
+<?php endif; ?>
+
 <div class="pf-grid pf-grid--4 pf-tiles">
   <a class="pf-card pf-stat pf-tile" href="/admin/reviews.php"><span class="pf-stat-number"><?= (int) $stats['pending_reviews'] ?></span><span class="pf-stat-label"><?= h(__('Pending reviews')) ?></span></a>
   <a class="pf-card pf-stat pf-tile" href="/admin/profiles.php?status=live"><span class="pf-stat-number"><?= (int) $stats['live_imprints'] ?></span><span class="pf-stat-label"><?= h(__('Live imprints')) ?></span></a>
   <a class="pf-card pf-stat pf-tile" href="/admin/customers.php"><span class="pf-stat-number"><?= (int) $stats['customers'] ?></span><span class="pf-stat-label"><?= h(__('Customers')) ?></span></a>
   <a class="pf-card pf-stat pf-tile" href="/admin/requests.php?status=new"><span class="pf-stat-number"><?= (int) $stats['new_requests'] ?></span><span class="pf-stat-label"><?= h(__('New requests')) ?></span></a>
+</div>
+
+<div class="pf-grid pf-grid--4 pf-tiles">
+  <a class="pf-card pf-stat pf-tile" href="/admin/requests.php?tab=deletions"><span class="pf-stat-number"><?= (int) $stats['deletions_open'] ?></span><span class="pf-stat-label"><?= h(__('Open deletion requests')) ?></span></a>
+  <a class="pf-card pf-stat pf-tile" href="/admin/requests.php?tab=deletions&amp;dstatus=on_hold"><span class="pf-stat-number"><?= (int) $stats['deletions_hold'] ?></span><span class="pf-stat-label"><?= h(__('Deletions on hold')) ?></span></a>
+  <a class="pf-card pf-stat pf-tile" href="/admin/customers.php"><span class="pf-stat-number"><?= (int) $stats['legal_holds'] ?></span><span class="pf-stat-label"><?= h(__('Customers under legal hold')) ?></span></a>
+  <a class="pf-card pf-stat pf-tile" href="/admin/vault.php"><span class="pf-stat-number"><?= (int) $stats['id_inbox'] ?></span><span class="pf-stat-label"><?= h(__('ID files in the web inbox')) ?></span></a>
 </div>
 
 <div class="pf-grid pf-grid--2">

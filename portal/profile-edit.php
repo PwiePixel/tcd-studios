@@ -140,6 +140,10 @@ if (is_post()) {
             if ($result['ok']) {
                 redirect($back, ['ok' => __('Thank you! Your imprint was submitted. Our team will review it and send you an e-mail.')]);
             }
+            if (isset($result['errors']['_identity'])) {
+                // The draft is saved; the ID photo is missing, so nothing was submitted.
+                redirect('/portal/identity.php?id=' . $pid, ['error' => $result['errors']['_identity']]);
+            }
             $errors = $result['errors'];
             flash_add('error', __('Your changes were saved as a draft, but the imprint cannot be submitted yet. Please complete the highlighted fields.'));
         } else {
@@ -171,6 +175,7 @@ render_view('portal/profile-edit', [
     'errors'      => $errors,
     'kinds'       => $kinds,
     'termsAccepted' => portal_terms_accepted($user),
+    'identity'    => portal_identity_state($profile),
     'maxLinks'    => $maxLinks,
     'self'        => $self,
     'back'        => $back,

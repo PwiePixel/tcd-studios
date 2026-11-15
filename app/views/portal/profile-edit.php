@@ -4,6 +4,7 @@
  * @var array<string,mixed> $form @var array<string,string> $private @var array<string,string> $privateLabels
  * @var array<int,array{label:string,url:string}> $links @var array<string,string> $newLink @var array<string,string> $errors
  * @var array<string,string> $kinds @var int $maxLinks @var string $self @var string $back @var bool $termsAccepted
+ * @var array<string,mixed> $identity
  */
 defined('TCD_APP') || exit;
 $e = $errors;
@@ -109,6 +110,14 @@ $e = $errors;
       <?= h(__('They are only visible to you and to our team, who need them to verify your identity before approving your imprint. Your imprint shows the management address of TCD-Studio/Agency instead.')) ?>
     </div>
     <p class="pf-muted pf-small"><?= h(__('Legal name, address, postal code, city and country are required before you can submit.')) ?></p>
+    <div class="pf-notice pf-notice--info" id="identity-note">
+      <strong><?= h(__('A photo of your ID card is needed before the first submission.')) ?></strong>
+      <?= h(__('We use it once to verify the name and address above. It is encrypted when you upload it, only authorised staff can open it, and after the check it is kept only encrypted on a separate secure storage until you end the service. You can do this at any time before you submit.')) ?>
+      <div class="pf-row">
+        <?= portal_identity_badge_html((string) $identity['step']) ?>
+        <a href="/portal/identity.php?id=<?= (int) $profile['id'] ?>"><?= h($identity['attention'] ? __('Upload ID photo') : __('Identity check details')) ?></a>
+      </div>
+    </div>
     <div class="pf-field">
       <label for="f-legal_name"><?= h($privateLabels['legal_name']) ?></label>
       <input type="text" id="f-legal_name" name="legal_name" value="<?= h($private['legal_name']) ?>" maxlength="120" autocomplete="name"<?= portal_invalid($e, 'legal_name') ?>>

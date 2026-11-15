@@ -18,10 +18,21 @@ foreach (db_all('SELECT slug AS s FROM services UNION SELECT DISTINCT service_sl
     $slugs[] = (string) $row['s'];
 }
 
+// Second tab: deletion requests (customers ending the service), see erase.php.
+$tab = get_str('tab', 20) === 'deletions' ? 'deletions' : 'requests';
+$dStatus = get_str('dstatus', 20);
+if (!in_array($dStatus, admin_deletion_statuses(), true)) {
+    $dStatus = '';
+}
+
 render_view('admin/requests', [
     'title' => __('Requests'),
-    'requests' => requests_list($status, $service),
+    'tab' => $tab,
+    'requests' => $tab === 'requests' ? requests_list($status, $service) : [],
     'status' => $status,
     'service' => $service,
     'slugs' => $slugs,
+    'deletions' => $tab === 'deletions' ? admin_deletion_requests($dStatus) : [],
+    'dStatus' => $dStatus,
+    'deletionCounts' => admin_deletion_counts(),
 ]);

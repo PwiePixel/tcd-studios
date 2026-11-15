@@ -73,6 +73,7 @@ function portal_export_data(array $user): array
             'page_name'         => (string) $p['slug'],
             'status'            => (string) $p['status'],
             'identity_verified' => (bool) $p['identity_verified'],
+            'identity_checks'   => portal_export_identity((int) $p['id']),
             'created_at'        => portal_iso((int) $p['created_at']),
             'published_at'      => portal_iso($p['published_at'] !== null ? (int) $p['published_at'] : null),
             'revisions'         => $revisions,
@@ -104,6 +105,57 @@ function portal_export_data(array $user): array
         ],
         'imprint_profiles' => $profiles,
         'service_requests' => $requests,
+        'deletion_request' => portal_export_deletion($uid),
+    ];
+}
+
+/**
+ * Identity checks of a profile for the data export: status, timestamps and number of files per check. The images
+ * themselves (and every storage name/reference) are never part of it.
+ *
+ * @return array<int,array<string,mixed>> newest first
+ */
+function portal_export_identity(int $profileId): array
+{
+    $out = [];
+    foreach (db_all('SELECT * FROM identity_requests WHERE profile_id = ? AND status != \'erased\' ORDER BY id DESC', [$profileId]) as $req) {
+        $files = [];
+        $archivedAt = null;
+        foreach (identity_files((int) $req['id']) as $f) {
+            $files[] = [
+                'side'        => (string) $f['side'],
+                'uploaded_at' => portal_iso((int) $f['created_at']),
+                'archived_at' => portal_iso($f['archived_at'] !== null ? (int) $f['archived_at'] : null),
+                'stored'      => ($f['archive_ref'] !== null && $f['archive_ref'] !== '') ? 'encrypted, secure archive' : 'encrypted, web server (temporary)',
+            ];
+            if ($f['archived_at'] !== null) {
+                $archivedAt = max((int) $archivedAt, (int) $f['archived_at']);
+            }
+        }
+        $out[] = [
+            'status'      => (string) $req['status'],
+            'uploaded_at' => portal_iso((int) $req['created_at']),
+            'verified_at' => portal_iso($req['verified_at'] !== null ? (int) $req['verified_at'] : null),
+            'archived_at' => portal_iso($archivedAt),
+            'file_count'  => count($files),
+            'files'       => $files,
+            'note'        => (string) $req['note'],
+        ];
+    }
+    return $out;
+}
+
+/** The open deletion request of a customer for the data export (status and times only), or null. @return array<string,mixed>|null */
+function portal_export_deletion(int $userId): ?array
+{
+    $r = termination_pending($userId);
+    if ($r === null) {
+        return null;
+    }
+    return [
+        'status'       => (string) $r['status'],
+        'requested_at' => portal_iso((int) $r['created_at']),
+        'confirmed_at' => portal_iso($r['confirmed_at'] !== null ? (int) $r['confirmed_at'] : null),
     ];
 }
 

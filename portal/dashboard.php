@@ -25,4 +25,5 @@ render_view('portal/dashboard', [
     'requests' => $requests,
     'termsAccepted' => portal_terms_accepted($user),
     'termsInfo' => portal_terms_info($user),
+    'termination' => portal_termination_state($user),
 ]);

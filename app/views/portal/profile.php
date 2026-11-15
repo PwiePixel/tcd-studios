@@ -52,6 +52,14 @@ $hasLive = $profile['live_revision_id'] !== null;
           <span class="pf-muted"><?= h(__('none')) ?></span>
         <?php endif; ?>
       </dd>
+      <dt><?= h(__('Identity check')) ?></dt>
+      <dd id="identity-step">
+        <?= portal_identity_badge_html((string) $s['identity']['step']) ?>
+        <?php if ($s['identity']['step'] === 'uploaded'): ?>
+          <div class="pf-small pf-muted"><?= h(__('Waiting for review by our team.')) ?></div>
+        <?php endif; ?>
+        <div><a class="pf-small" href="/portal/identity.php?id=<?= $pid ?>"><?= h($s['identity']['attention'] ? __('Upload ID photo') : __('Details')) ?></a></div>
+      </dd>
       <?php if ($open !== null && $open['state'] === 'draft'): ?>
         <dt><?= h(__('Private details')) ?></dt>
         <dd>
@@ -75,6 +83,13 @@ $hasLive = $profile['live_revision_id'] !== null;
 <?php if (!$termsAccepted): ?>
     <div class="pf-notice"><?= h(__('To submit this draft for review, please accept our current Terms and Conditions (AGB) first.')) ?>
       <a href="/portal/terms.php"><?= h(__('Review and accept')) ?></a></div>
+<?php endif; ?>
+<?php if ($s['identity']['attention']): ?>
+    <div class="pf-notice" id="identity-needed">
+      <strong><?= h(__('One step is missing before you can submit: the identity check.')) ?></strong>
+      <?= h(portal_identity_explanation($s['identity'])) ?>
+      <div class="pf-actions pf-actions--tight"><a class="pf-btn pf-btn--primary pf-btn--small" href="/portal/identity.php?id=<?= $pid ?>"><?= h(__('Upload ID photo')) ?></a></div>
+    </div>
 <?php endif; ?>
     <div class="pf-actions">
       <a class="pf-btn" href="/portal/profile-edit.php?id=<?= $pid ?>"><?= h(__('Edit')) ?></a>

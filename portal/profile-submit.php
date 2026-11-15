@@ -22,6 +22,10 @@ if ($open === null || $open['state'] !== 'draft') {
 
 portal_require_terms($user);          // submitting for review needs the current Terms and Conditions
 $result = portal_submit_draft($profile, $open, $user);
+if (!$result['ok'] && isset($result['errors']['_identity'])) {
+    // Complete draft, but the ID photo is missing: nothing was submitted and the team was not notified.
+    redirect('/portal/identity.php?id=' . $pid, ['error' => $result['errors']['_identity']]);
+}
 if (!$result['ok']) {
     $fields = portal_error_fields($result['errors']);
     $message = $result['errors']['_form'] ?? __('Your draft cannot be submitted yet. Please check:') . ' ' . $fields;

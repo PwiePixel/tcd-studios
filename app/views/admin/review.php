@@ -3,6 +3,7 @@
  * @var array<string,mixed> $rev @var array<string,mixed> $profile @var array<string,mixed>|null $owner @var array<string,mixed>|null $live
  * @var array<int,array<string,string>> $diff @var array<string,string> $privateChanged @var string $preview
  * @var array<int,array<string,mixed>> $history @var string $formError @var string $noteValue @var array<int,string> $reviewers
+ * @var array<string,mixed> $identity @var bool $overrideTicked @var string $overrideNote
  */
 defined('TCD_APP') || exit;
 $self = '/admin/review.php?id=' . (int) $rev['id'];
@@ -60,6 +61,30 @@ $privLabels = [
   </section>
 </div>
 
+<?php $idReq = $identity['request']; $idGate = $identity['required'] && !$identity['present'] && $rev['state'] === 'submitted'; ?>
+<section class="pf-card<?= $idGate ? ' pf-card--warn' : '' ?>" id="identity">
+  <h2><?= h(__('Identity documents')) ?></h2>
+  <dl class="pf-kv">
+    <dt><?= h(__('ID check')) ?></dt>
+    <dd><?php if ($owner === null): ?><span class="pf-muted"><?= h(__('not required (this imprint has no owner)')) ?></span>
+      <?php elseif ($identity['required']): ?><span class="pf-badge pf-badge--pending"><?= h(__('required')) ?></span>
+        <span class="pf-muted pf-small"><?= h(!empty($profile['identity_verified']) ? __('the address data differ from the verified version') : __('first submission – the identity has not been verified yet')) ?></span>
+      <?php else: ?><span class="pf-badge pf-badge--ok"><?= h(__('not required')) ?></span>
+        <span class="pf-muted pf-small"><?= h(__('the address data are unchanged since the identity was verified')) ?></span><?php endif; ?></dd>
+    <dt><?= h(__('Upload')) ?></dt>
+    <dd><?php if ($idReq !== null): ?><?= admin_identity_badge((string) $idReq['status']) /* escaped badge HTML from the helper */ ?>
+        <span class="pf-muted pf-small"><?= (int) $identity['files'] ?> <?= h(__('file(s)')) ?>, <?= h(fmt_time((int) $idReq['created_at'])) ?></span>
+      <?php else: ?><span class="pf-badge pf-badge--draft"><?= h(__('no ID photo uploaded')) ?></span><?php endif; ?></dd>
+  </dl>
+  <?php if ($idGate): ?>
+    <div class="pf-notice pf-notice--warn"><strong><?= h(__('No ID photo yet.')) ?></strong>
+      <?= h($identity['vault_ready'] ? __('Approval is refused until the customer has uploaded one (or you document another proof of identity in the decision form).') : __('The identity vault has no public key, so customers cannot upload one. Approval is refused unless you document another proof of identity in the decision form.')) ?></div>
+  <?php endif; ?>
+  <?php if ($idReq !== null && (int) $identity['files'] > 0): ?>
+    <p><a class="pf-btn pf-btn--small<?= $rev['state'] === 'submitted' ? ' pf-btn--primary' : '' ?>" href="/admin/identity.php?id=<?= (int) $idReq['id'] ?>"><?= h(__('Open ID documents and compare')) ?></a></p>
+  <?php endif; ?>
+</section>
+
 <section class="pf-card">
   <h2><?= h($live ? __('Changes compared with the live version') : __('First submission')) ?></h2>
   <?php if (!$live): ?>
@@ -94,6 +119,20 @@ $privLabels = [
       <input type="checkbox" id="verified" name="verified" value="1">
       <label for="verified"><?= h(__('I verified the identity and address')) ?></label>
     </div>
+<?php if ($idGate): ?>
+    <fieldset class="pf-fieldset pf-fieldset--warn">
+      <legend><?= h(__('Exceptional case: no ID photo')) ?></legend>
+      <div class="pf-check">
+        <input type="checkbox" id="identity_override" name="identity_override" value="1"<?= $overrideTicked ? ' checked' : '' ?>>
+        <label for="identity_override"><?= h(__('Identity verified by other proof')) ?></label>
+      </div>
+      <div class="pf-field">
+        <label for="identity_override_note"><?= h(__('How was the identity verified? (required)')) ?></label>
+        <textarea id="identity_override_note" name="identity_override_note" maxlength="500" rows="3"><?= h($overrideNote) ?></textarea>
+        <div class="pf-help"><?= h(__('Recorded with the identity request and in the audit log. Describe the proof only (e.g. "video identification on 2026-11-15"), do not copy personal data.')) ?></div>
+      </div>
+    </fieldset>
+<?php endif; ?>
     <div class="pf-field">
       <label for="note"><?= h(__('Note to the customer')) ?></label>
       <textarea id="note" name="note" maxlength="2000"><?= h($noteValue) ?></textarea>

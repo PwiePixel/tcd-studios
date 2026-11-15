@@ -1,7 +1,7 @@
 <?php
 /**
  * @var array<string,mixed> $user @var string $nameValue @var array<string,string> $errors
- * @var array<int,array<string,mixed>> $requests @var bool $deletionOpen @var array{version:?string,at:?int,current:bool} $termsInfo
+ * @var array<int,array<string,mixed>> $requests @var array{status:string,created_at:?int,link_until:?int,link_valid:bool,legal_hold:bool} $termination @var array{version:?string,at:?int,current:bool} $termsInfo
  */
 defined('TCD_APP') || exit;
 ?>
@@ -97,18 +97,13 @@ defined('TCD_APP') || exit;
     <div class="pf-actions"><button class="pf-btn" type="submit"><?= h(__('Download my data (JSON)')) ?></button></div>
   </form>
   <hr class="pf-rule">
-  <h3><?= h(__('Delete my account')) ?></h3>
-<?php if ($deletionOpen): ?>
-  <div class="pf-notice pf-notice--info"><?= h(__('Your deletion request is with our team. Nothing has been deleted yet; we will contact you.')) ?></div>
+  <h3 id="end-service"><?= h(__('End the service and delete all my data')) ?></h3>
+<?php if ($termination['status'] === 'on_hold'): ?>
+  <div class="pf-notice" id="termination-notice"><?= h(__('Your deletion request is on hold: we are legally required to keep some of your data for now. It is deleted as soon as the reason no longer applies.')) ?></div>
+<?php elseif ($termination['status'] !== 'none'): ?>
+  <div class="pf-notice" id="termination-notice"><?= h(__('You asked to end the service. We mailed you a confirmation link; nothing is deleted until you confirm.')) ?></div>
 <?php else: ?>
-  <p class="pf-muted"><?= h(__('Send us a request to delete your account. Nothing is deleted automatically: our team will process your request and contact you. Data that we are legally required to keep may be retained.')) ?></p>
-  <form class="pf-form" method="post" action="/portal/account-delete.php">
-    <?= csrf_field() ?>
-    <div class="pf-check">
-      <input type="checkbox" id="f-confirm" name="confirm" value="1" required>
-      <label for="f-confirm"><?= h(__('Yes, I want to request the deletion of my account and my imprint profiles.')) ?></label>
-    </div>
-    <div class="pf-actions"><button class="pf-btn pf-btn--danger" type="submit"><?= h(__('Request account deletion')) ?></button></div>
-  </form>
+  <p class="pf-muted"><?= h(__('You can end Imprint Protection at any time. Your imprint pages go offline and all your data, including address data and ID photos, is deleted automatically and irrevocably. We e-mail you a confirmation link first.')) ?></p>
 <?php endif; ?>
+  <p><a class="pf-btn pf-btn--danger" href="/portal/terminate.php"><?= h($termination['status'] === 'none' ? __('End the service…') : __('Continue ending the service')) ?></a></p>
 </div>

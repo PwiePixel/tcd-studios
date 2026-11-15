@@ -72,6 +72,7 @@ function portal_profile_summary(array $profile): array
         'is_live'        => $isLive,
         'url'            => $isLive ? imprint_public_url((string) $profile['slug']) : '',
         'update_pending' => $open !== null && $open['state'] === 'submitted' && $profile['live_revision_id'] !== null,
+        'identity'       => portal_identity_state($profile),
     ];
 }
 
@@ -197,6 +198,12 @@ function portal_submit_draft(array $profile, array $revision, array $user): arra
     if ($errors !== []) {
         return ['ok' => false, 'errors' => $errors];
     }
+    // The first submission (and every change of name/address) needs the ID photo. The draft stays saved, nothing is
+    // submitted and the team is not notified; the callers send the customer to the identity page.
+    $identityMessage = portal_identity_gate($profile, ['private' => $private] + $revision);
+    if ($identityMessage !== null) {
+        return ['ok' => false, 'errors' => ['_identity' => $identityMessage]];
+    }
     $rid = (int) $revision['id'];
     try {
         db_transaction(static function () use ($rid, $public, $private) {
@@ -212,7 +219,8 @@ function portal_submit_draft(array $profile, array $revision, array $user): arra
         "A customer submitted an imprint " . ($first ? 'for the first time' : 'update') . " for review.\n\n"
         . 'Public name: ' . $public['display_name'] . "\n"
         . 'Page name:   ' . $profile['slug'] . "\n"
-        . 'Owner:       ' . $user['email'] . "\n\n"
+        . 'Owner:       ' . $user['email'] . "\n"
+        . 'ID photo:    ' . (identity_upload_present((int) $profile['id']) ? 'uploaded (encrypted)' : 'not needed for this version') . "\n\n"
         . "Review it here:\n" . site_url('/admin/review.php?id=' . $rid)
     );
     audit('revision.submit', 'revision', $rid, ['profile_id' => (int) $profile['id'], 'slug' => (string) $profile['slug'], 'first' => $first]);

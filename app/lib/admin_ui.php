@@ -140,6 +140,10 @@ function admin_dashboard_stats(): array
         'live_imprints'   => $count('SELECT COUNT(*) AS n FROM profiles WHERE status = \'live\''),
         'customers'       => $count('SELECT COUNT(*) AS n FROM users WHERE role = \'customer\''),
         'new_requests'    => $count('SELECT COUNT(*) AS n FROM service_requests WHERE status = \'new\''),
+        'deletions_open'  => $count('SELECT COUNT(*) AS n FROM deletion_requests WHERE status IN (\'requested\',\'confirmed\')'),
+        'deletions_hold'  => $count('SELECT COUNT(*) AS n FROM deletion_requests WHERE status = \'on_hold\''),
+        'legal_holds'     => $count('SELECT COUNT(*) AS n FROM users WHERE legal_hold = 1'),
+        'id_inbox'        => $count('SELECT COUNT(*) AS n FROM identity_files WHERE deleted_at IS NULL AND inbox_name IS NOT NULL'),
     ];
 }
 

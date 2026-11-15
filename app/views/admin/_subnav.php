@@ -2,7 +2,7 @@
 /** Secondary navigation for pages that are not in the main menu. @var string $current */
 defined('TCD_APP') || exit;
 $items = [
-    'settings.php' => __('Settings'), 'admins.php' => __('Admins'), 'account.php' => __('My account'),
+    'settings.php' => __('Settings'), 'vault.php' => __('Identity vault'), 'admins.php' => __('Admins'), 'account.php' => __('My account'),
 ];
 $current = isset($current) ? (string) $current : '';
 ?>

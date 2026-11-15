@@ -11,6 +11,9 @@ Die Seite ist ein statischer Webauftritt (HTML/CSS/JS) mit einem kleinen PHP-Bac
 dem **Impressumsschutz-System** (Kundenbereich + Admin-Panel), siehe unten und **[docs/BETRIEB.md](docs/BETRIEB.md)**.
 Impressumsschutz gibt es **für alle Creator (und nur für Creator)**, mit AGB (`/agb/` Deutsch, `/terms/` Englisch); für **Shops nur
 auf Anfrage**, künftige Shop-Zahlungen sind **über die Stripe-API geplant** (noch nicht umgesetzt).
+Kunden weisen ihre Identität per **verschlüsselt hochgeladenem Ausweisfoto** nach; beim Beenden des Dienstes werden alle Daten
+automatisch gelöscht. Einrichtung (Schlüsselpaar, sicheres Archiv, Sicherung) und rechtliche Hinweise für den Betreiber:
+[docs/BETRIEB.md](docs/BETRIEB.md), Abschnitt „Ausweisprüfung und Löschung“.
 Die Seite wurde aus einem IONOS-Sitejet-Export übernommen und für tcd-studio.de neu aufgesetzt. Das Design ist
 unverändert (per Screenshot-Vergleich gegen das Original geprüft: 8 Seiten × 3 Bildschirmgrößen; abweichend
 sind nur die neuen Hinweistexte und die geänderten Domains/E-Mail-Adressen). Bewusst entfernt wurde der
@@ -83,7 +86,8 @@ Guard in jeder Datei den Direktaufruf.
   (Freigabe-Benachrichtigungen, Kontakt in den Creator-Impressen), `privacy-policy` (Datenschutz-Kontakt),
   `no-reply` (Absender der System-Mails). Die Adresse `creepyx_470@` gibt es nicht mehr.
 - **Rechtstexte:** Im Impressum wurden nur Domain, E-Mail-Adresse, „Website Owner“ (jetzt `TCD-Studio/Agency`) und der
-  Zweitstellen-Hinweis geändert; die Datenschutzerklärung nur in Titel/Meta-Daten. Inhaltlich geprüft wurde nichts,
+  Zweitstellen-Hinweis geändert; die Datenschutzerklärung nur in Titel/Meta-Daten und um den Abschnitt „Imprint Protection (customer area)“ / „Impressumsschutz
+  (Kundenbereich)“. Inhaltlich geprüft wurde nichts,
   bitte vor dem Livegang rechtlich gegenlesen. Die Datenschutzerklärung bindet wie im Original ein
   Matomo-Opt-out-Fenster von `page-stats.de` ein (die Seite selbst nutzt kein Tracking); ob das bleiben soll, ist eine
   inhaltliche Entscheidung.

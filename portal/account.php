@@ -38,13 +38,9 @@ if (is_post()) {
 }
 
 $requests = [];
-$deletionOpen = false;
 foreach (requests_by_user((int) $user['id']) as $request) {
     $request['service_label'] = portal_service_label((string) $request['service_slug']);
     $requests[] = $request;
-    if ($request['service_slug'] === 'account-deletion' && in_array($request['status'], ['new', 'in_progress'], true)) {
-        $deletionOpen = true;
-    }
 }
 
 render_view('portal/account', [
@@ -52,6 +48,6 @@ render_view('portal/account', [
     'nameValue'    => $nameValue,
     'errors'       => $errors,
     'requests'     => $requests,
-    'deletionOpen' => $deletionOpen,
+    'termination'  => portal_termination_state($user),
     'termsInfo'    => portal_terms_info($user),
 ]);

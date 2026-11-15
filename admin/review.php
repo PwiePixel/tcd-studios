@@ -18,6 +18,8 @@ if ($profile === null) {
 $self = '/admin/review.php?id=' . $id;
 $formError = '';
 $noteValue = '';
+$overrideTicked = false;
+$overrideNote = '';
 
 if (is_post()) {
     csrf_verify();
@@ -32,9 +34,22 @@ if (is_post()) {
         redirect($self, ['error' => __('This revision has already been processed.')]);
     }
 
+    // Identity gate: a first submission (or changed address data) of a customer needs an uploaded ID photo,
+    // unless the admin documents that the identity was verified by other proof (exceptional cases).
+    $idRequired = $owner !== null && identity_required_for($profile, $rev);
+    $idMissing = $idRequired && !identity_upload_present($pid);
+    $overrideTicked = post_bool('identity_override');
+    $overrideNote = post_str('identity_override_note', 500);
+
     if ($action === 'approve') {
         if (!post_bool('verified')) {
             $formError = __('Please confirm that you verified the identity and address.');
+        } elseif ($idMissing && !$overrideTicked) {
+            $formError = vault_configured()
+                ? __('No ID photo has been uploaded for this submission, so it cannot be approved. Ask the customer to upload one – or, in an exceptional case, tick "Identity verified by other proof" and describe the proof.')
+                : __('No ID photo has been uploaded and the identity vault has no public key yet, so customers cannot upload one. Set up the vault first – or, in an exceptional case, tick "Identity verified by other proof" and describe the proof.');
+        } elseif ($idMissing && $overrideNote === '') {
+            $formError = __('Please describe the other proof of identity in the note field (for example "video identification on 2026-11-15"). Do not copy personal data into it.');
         } else {
             try {
                 db_transaction(static function () use ($id, $pid, $admin, $noteValue, $fingerprint) {
@@ -61,6 +76,32 @@ if (is_post()) {
             }
             if ($formError === '') {
                 audit('review.approve', 'revision', $id, ['profile_id' => $pid, 'slug' => (string) $profile['slug'], 'number' => (int) $rev['number']]);
+                // Identity: mark the request verified and move the encrypted files to the archive. The approval stays valid
+                // even if archiving fails; the admin is sent to the identity page to retry.
+                $archiveWarning = '';
+                $archiveNote = '';
+                try {
+                    if ($idMissing) {
+                        $oid = admin_identity_record_override((int) $owner['id'], $pid, (int) $admin['id'], $overrideNote);
+                        audit('review.identity_override', 'identity_request', $oid, ['profile_id' => $pid, 'revision_id' => $id]);
+                    } else {
+                        $idRes = admin_identity_verify_and_archive($pid, (int) $admin['id']);
+                        if ($idRes !== null) {
+                            audit('identity.verified', 'identity_request', $idRes['request_id'], ['revision_id' => $id, 'archived' => $idRes['archived'], 'failed' => $idRes['failed']]);
+                            if ($idRes['failed'] > 0) {
+                                $archiveWarning = '/admin/identity.php?id=' . $idRes['request_id'];
+                                $archiveNote = implode('; ', array_slice($idRes['errors'], 0, 2));
+                            } elseif ($idRes['archived'] > 0) {
+                                $archiveNote = 'archived';
+                            }
+                        }
+                    }
+                } catch (Throwable $e) {
+                    error_log('review identity step failed (revision ' . $id . '): ' . $e->getMessage());
+                    $row = admin_identity_open_request($pid);
+                    $archiveWarning = $row !== null ? '/admin/identity.php?id=' . (int) $row['id'] : '';
+                    $archiveNote = __('unexpected error, see the server log');
+                }
                 if ($owner !== null) {
                     admin_mail_user($owner, __('Your imprint is online'), sprintf(
                         "your imprint \"%s\" has been approved and is now online:\n\n%s\n\n%sYou can change it at any time in your customer area; changes are reviewed again before they go live.",
@@ -69,7 +110,15 @@ if (is_post()) {
                         $noteValue !== '' ? "Note from our team:\n" . $noteValue . "\n\n" : ''
                     ));
                 }
-                redirect('/admin/reviews.php', ['ok' => sprintf(__('Approved and published: %s'), imprint_public_url((string) $profile['slug']))]);
+                if ($archiveWarning !== '') {
+                    redirect($archiveWarning, ['error' => sprintf(
+                        __('Approved and published (%s), BUT the ID files could not be moved to the secure archive: %s. They are still on the web server. Use "Archive now" below to retry.'),
+                        imprint_public_url((string) $profile['slug']),
+                        $archiveNote
+                    )]);
+                }
+                redirect('/admin/reviews.php', ['ok' => sprintf(__('Approved and published: %s'), imprint_public_url((string) $profile['slug']))
+                    . ($archiveNote === 'archived' ? ' ' . __('The ID files are now in the secure archive and were deleted from the web server.') : '')]);
             }
         }
     } elseif ($action === 'reject') {
@@ -127,8 +176,19 @@ if ($live !== null) {
     }
 }
 
+$identity = [
+    'required' => $owner !== null && identity_required_for($profile, $rev),
+    'present' => identity_upload_present((int) $profile['id']),
+    'request' => admin_identity_open_request((int) $profile['id']) ?? identity_request_for_profile((int) $profile['id']),
+    'vault_ready' => vault_configured(),
+];
+$identity['files'] = $identity['request'] !== null ? count(identity_files((int) $identity['request']['id'])) : 0;
+
 render_view('admin/review', [
     'title' => __('Review') . ' #' . $id,
+    'identity' => $identity,
+    'overrideTicked' => $overrideTicked,
+    'overrideNote' => $overrideNote,
     'rev' => $rev,
     'profile' => $profile,
     'owner' => $owner,

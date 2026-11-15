@@ -78,6 +78,10 @@ function admin_system_checks(): array
         $add(__('Setup token'), 'warn', __('An old setup token file is still in the data directory (setup-token-….txt). Delete it.'));
     }
 
+    foreach (admin_vault_checks() as $c) {        // identity vault, archive, data key, inbox age, secure_delete
+        $checks[] = $c;
+    }
+
     return $checks;
 }
 

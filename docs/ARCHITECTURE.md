@@ -33,6 +33,9 @@ Texte: `app/views/site/agb.php` (DE, verbindlich), `terms.php` (EN), Controller 
 - **Dienstende**: `termination_request()` (Antrag im System + Bestätigungslink) → `termination_confirm()` (nach Passwort + Häkchen)
   → `account_erase()` löscht automatisch und unwiderruflich (Seiten offline, Ausweisdateien in Inbox + Archiv, Profile/Revisionen/Adressdaten,
   Anfragen, Konto; Audit-Log pseudonymisiert; `PRAGMA secure_delete`). `legal_hold` (nur Admin) blockiert die Löschung.
+- **Betrieb, Einrichtung und Rechtliches** (Schlüsselpaar, Archiv, Sicherung, Routine, Legal Hold, Löschablauf, Tests, Hinweise an den
+  Betreiber): [BETRIEB.md](BETRIEB.md), Abschnitt „Ausweisprüfung und Löschung“. Die Rechtstexte dazu stehen in `privacy/index.html`,
+  `app/views/site/agb.php` (§ 4, § 5, § 7) und `terms.php`; sie müssen zum tatsächlichen Verhalten des Systems passen.
 
 ## Verzeichnisse
 ```
