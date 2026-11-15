@@ -1,1 +1,28 @@
 /* Customer area only (portal/*.php). Add area-specific styles here; shared styles live in portal.css. */
+
+.pf-rule { border: 0; border-top: 1px solid var(--pf-line); margin: 20px 0; }
+.pf-main h1 { margin-bottom: 1rem; }
+.pf-main h1 + .pf-muted { margin-top: -.4rem; }
+.pf-card h2 + .pf-muted { margin-top: -.2rem; }
+.pf-card > .pf-row--between { margin-bottom: 10px; }
+.pf-card > .pf-row--between > h2 { margin-bottom: 0; }
+.pf-notice strong { font-weight: 700; }
+.pf-notice .pf-list { margin: 8px 0 0; }
+.pf-notice p:last-child { margin-bottom: 0; }
+.pf-table code { font-size: .85em; background: #f1f1f1; padding: 1px 6px; border-radius: 3px; }
+
+/* Link manager in the imprint editor */
+.pf-link-list { list-style: none; margin: 0 0 20px; padding: 0; border: 1px solid var(--pf-line); border-radius: var(--pf-radius); }
+.pf-link-list li { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 10px 14px; border-bottom: 1px solid var(--pf-line); }
+.pf-link-list li:last-child { border-bottom: 0; }
+.pf-link-text { min-width: 0; overflow-wrap: anywhere; }
+.pf-actions--tight { margin-top: 0; margin-bottom: 16px; }
+.pf-fieldset .pf-grid { gap: 0 24px; }
+
+/* Preview of the imprint (fragment from imprint_render_fragment) */
+.pf-preview-box { border: 1px dashed #bbb; border-radius: var(--pf-radius); padding: 20px; background: #fff; overflow-wrap: anywhere; }
+
+@media (max-width: 800px) {
+  .pf-link-list li { flex-direction: column; align-items: flex-start; }
+  .pf-card { padding: 18px; }
+}
