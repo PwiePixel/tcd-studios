@@ -1,0 +1,86 @@
+/*
+ * Public service pages (/imprint-protection/, /services/, /shops/, /coming-soon/).
+ * Loaded after theme.css inside the Sitejet frame; look: Poppins, black/white, red accent (#ff4747).
+ * Everything is scoped to .site-page so the imprint pages and the original pages are not affected.
+ */
+.site-page { padding-bottom: 1rem; }
+.site-page p { margin: 0 0 1rem; }
+.site-page a { color: #ff4747; }
+.site-page a.button,
+.site-page a.button:hover { color: #fff; }
+.site-page a:hover { text-decoration: underline; }
+.site-page a.button:hover { text-decoration: none; }
+
+.site-lead { max-width: 44rem; margin: 1rem auto 1.5rem !important; text-align: center; font-size: 1.15rem; line-height: 1.6; }
+.site-center { text-align: center; }
+.site-section { margin-top: 3rem; }
+.site-section > .ed-headline { margin-bottom: 1.25rem; }
+.site-section > .ed-headline h3 { font-size: 1.5rem; }
+.site-intro { max-width: 44rem; margin-left: auto; margin-right: auto; }
+
+/* Cards */
+.site-grid { display: grid; gap: 1.5rem; grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr)); margin: 1.5rem 0; }
+.site-grid--4 { grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr)); }
+.site-card { position: relative; display: flex; flex-direction: column; background: #fff; padding: 1.5rem; border-bottom: 2px solid #ff4747; box-shadow: 5px 5px 20px rgba(0, 0, 0, 0.15); }
+.site-card h3,
+.site-card h4 { margin: 0 0 0.5rem; font-size: 1.1rem; line-height: 1.3; text-align: left; }
+.site-card p { margin: 0 0 0.75rem; }
+.site-card p:last-child { margin-bottom: 0; }
+.site-card ul { margin: 0 0 0.75rem; }
+.site-card-cta { margin-top: auto !important; padding-top: 0.75rem; }
+
+/* Steps */
+.site-step-number { display: inline-flex; align-items: center; justify-content: center; width: 2.25rem; height: 2.25rem; margin-bottom: 0.75rem; background: #ff4747; color: #fff; font-weight: 700; border-radius: 50%; }
+
+/* Badges */
+.site-badge { display: inline-block; align-self: flex-start; margin-bottom: 0.75rem; padding: 0.1rem 0.6rem; font-size: 0.78rem; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; border: 1px solid currentColor; }
+.site-badge--active { color: #1f7a45; background: #eaf6ee; }
+.site-badge--on_request { color: #8a5a00; background: #fff4dc; }
+.site-badge--coming_soon { color: #555; background: #efefef; }
+
+/* Notices */
+.site-notice { margin: 1.5rem 0; padding: 1rem 1.25rem; background: #f6f6f6; border-left: 4px solid #ff4747; }
+.site-notice p:last-child { margin-bottom: 0; }
+.site-notice--error { background: #fdeeee; border-left-color: #c62828; }
+.site-notice--ok { background: #eaf6ee; border-left-color: #1f7a45; }
+
+/* Buttons */
+.site-actions { display: flex; flex-wrap: wrap; gap: 0.75rem; justify-content: center; margin: 1.5rem 0; }
+.site-page .button.site-btn-ghost { background: transparent; color: #000; border-color: #000; }
+.site-page .button.site-btn-ghost:hover { background: #000; color: #fff; }
+
+/* FAQ (works without JavaScript) */
+.site-faq { max-width: 44rem; margin: 0 auto; }
+.site-faq details { border-top: 1px solid #ddd; padding: 0.85rem 0; }
+.site-faq details:last-child { border-bottom: 1px solid #ddd; }
+.site-faq summary { cursor: pointer; font-weight: 600; }
+.site-faq details p { margin: 0.6rem 0 0; }
+
+/* Lists with check marks */
+.site-list { margin: 0 0 1rem; padding-left: 1rem; }
+
+/* Forms */
+.site-form { max-width: 40rem; margin: 1.5rem auto 0; }
+.site-field { margin-bottom: 1rem; }
+.site-field label { display: block; margin-bottom: 0.25rem; font-size: 0.85rem; font-weight: 600; letter-spacing: 0.03em; text-transform: uppercase; }
+.site-field input[type="text"],
+.site-field input[type="email"],
+.site-field input[type="url"],
+.site-field select,
+.site-field textarea { display: block; width: 100%; padding: 0.6rem 0.75rem; font: inherit; color: #000; background: #fff; border: 1px solid #aaa; border-radius: 0; }
+.site-field textarea { min-height: 8rem; }
+.site-field input:focus,
+.site-field select:focus,
+.site-field textarea:focus { outline: 2px solid #ff4747; outline-offset: 1px; }
+.site-field--error input,
+.site-field--error select,
+.site-field--error textarea { border-color: #c62828; }
+.site-help { margin: 0.25rem 0 0 !important; font-size: 0.85rem; color: #555; }
+.site-error-text { margin: 0.25rem 0 0 !important; font-size: 0.85rem; color: #c62828; font-weight: 600; }
+.site-row { display: grid; gap: 0 1rem; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.site-hp { position: absolute; left: -10000px; width: 1px; height: 1px; overflow: hidden; }
+
+@media screen and (max-width: 35.9375rem) {
+  .site-row { grid-template-columns: minmax(0, 1fr); }
+  .site-lead { font-size: 1.05rem; }
+}

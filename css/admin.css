@@ -1,1 +1,54 @@
 /* Admin panel only (admin/*.php). Add area-specific styles here; shared styles live in portal.css. */
+
+/* Secondary navigation (pages that are not in the main menu) */
+.pf-subnav { display: flex; flex-wrap: wrap; gap: 6px 20px; margin: -6px 0 22px; padding-bottom: 10px; border-bottom: 1px solid var(--pf-line); font-size: .88rem; text-transform: uppercase; }
+.pf-subnav a { color: var(--pf-muted); padding: 2px 0; border-bottom: 2px solid transparent; }
+.pf-subnav a:hover, .pf-subnav a.is-active { color: var(--pf-ink); text-decoration: none; border-bottom-color: var(--pf-accent); }
+
+/* Dashboard tiles */
+.pf-tile { display: block; color: inherit; margin-bottom: 0; }
+.pf-body a.pf-tile:hover { text-decoration: none; border-color: var(--pf-accent); }
+.pf-tiles { margin-bottom: 24px; }
+.pf-notice--warn { background: #fdeceb; border-left-color: #c0392b; }
+
+/* Age of waiting items */
+.pf-age--warn { color: var(--pf-warn); font-weight: 700; }
+.pf-age--old { color: #c0392b; font-weight: 700; }
+
+/* Tables / rows */
+.pf-row-highlight td { background: #fff8e1; }
+.pf-row-current td { background: #f0f6ff; }
+.pf-nowrap { white-space: nowrap; }
+.pf-pre { white-space: pre-wrap; word-break: break-word; }
+.pf-title-sub { font-size: .9rem; font-weight: 300; text-transform: none; }
+.pf-table--audit code { font-size: .8rem; white-space: nowrap; }
+
+/* Cards that show private (identity) data */
+.pf-card--private { border-top: 3px solid #1d4fa3; background: #fbfcff; }
+
+/* Filters */
+.pf-filter { align-items: flex-end; gap: 10px 16px; }
+.pf-field--inline { margin-bottom: 0; }
+.pf-field--inline input[type=search], .pf-field--inline input[type=text] { min-width: 220px; }
+.pf-field--inline select { min-width: 160px; }
+.pf-row--nowrap { flex-wrap: nowrap; }
+.pf-row--nowrap input { flex: 1 1 auto; }
+.pf-actions--top { margin: 0 0 18px; }
+.pf-pager { margin-top: 14px; }
+
+/* Action forms on the imprint page */
+.pf-action { border: 1px solid var(--pf-line); border-radius: var(--pf-radius); padding: 16px 18px; background: #fcfcfc; }
+.pf-action--danger { border-color: #e6b3ad; background: #fff9f8; }
+
+/* 2FA */
+.pf-codes { list-style: none; margin: 0 0 8px; padding: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px 24px; max-width: 420px; }
+.pf-codes code { font-size: 1.05rem; letter-spacing: .08em; }
+.pf-secret { font-size: 1.05rem; letter-spacing: .1em; display: inline-block; margin: 4px 0; }
+.pf-steps { padding-left: 1.3rem; }
+.pf-steps li { margin-bottom: 12px; }
+.pf-qr { display: inline-block; word-break: break-all; }
+
+@media (max-width: 800px) {
+  .pf-codes { grid-template-columns: 1fr; }
+  .pf-row--nowrap { flex-wrap: wrap; }
+}

@@ -10,7 +10,7 @@ if (!defined('TCD_API')) {
  * Site-specific settings for the contact form backend. This is the ONLY file
  * you normally need to edit.
  *
- * IMPORTANT: the mailbox in 'recipient' (kontakt@tcd-studio.de) MUST EXIST and
+ * IMPORTANT: the mailbox in 'recipient' (contact@tcd-studio.de) MUST EXIST and
  * be able to receive mail, and the sender domain should be hosted on the same
  * server (SPF/DKIM) - otherwise messages are silently dropped or land in spam.
  *
@@ -21,7 +21,7 @@ if (!defined('TCD_API')) {
  */
 return [
     // --- Mail ---------------------------------------------------------------
-    'recipient'  => 'kontakt@tcd-studio.de',          // who receives the requests (must exist!)
+    'recipient'  => 'contact@tcd-studio.de',          // who receives the requests (must exist!)
     'sender'     => 'no-reply@tcd-studio.de',         // From: address and envelope sender
     'site_name'  => 'TCD-Studio/Agency',              // display name used in the From: header
     'mail_subject' => 'New contact request via tcd-studio.de',
