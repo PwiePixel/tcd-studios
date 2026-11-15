@@ -18,7 +18,14 @@ if (is_post()) {
         $pem = post_str('public_key', 8000);
         $keyValue = $pem;
         $existing = vault_public_key_pem();
-        $err = $pem === '' ? __('Please paste a public key or generate a key pair first.') : vault_validate_public_key($pem);
+        if (stripos($pem, 'PRIVATE KEY') !== false) {
+            // Never echo it back, never keep it: a private key does not belong on a server.
+            $pem = '';
+            $keyValue = '';
+            $err = __('This looks like a PRIVATE key. NEVER paste a private key here: it must stay offline. Nothing was saved. Please treat this key as compromised and generate a new pair.');
+        } else {
+            $err = $pem === '' ? __('Please paste a public key or generate a key pair first.') : vault_validate_public_key($pem);
+        }
         if ($err !== null) {
             $formError = $err;
         } elseif ($existing !== '' && admin_vault_same_key($existing, $pem)) {

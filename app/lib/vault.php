@@ -209,7 +209,9 @@ function vault_archive_dir(): string
     $configured = ($env !== false && $env !== '') ? $env : trim((string) config('vault.dir', ''));
     $dir = $configured !== '' ? rtrim($configured, '/') : data_dir() . '/vault-archive';
     if (!is_dir($dir)) {
-        @mkdir($dir, 0700, true);
+        // Only the last path component is created, and only if its parent exists: a missing mount point must not make
+        // the files silently land on the local disk.
+        @mkdir($dir, 0700, false);
     }
     return $dir;
 }
@@ -367,7 +369,7 @@ function identity_request_get(int $id): ?array
 /** @return array<int,array<string,mixed>> files of a request that still exist (not deleted), front before back */
 function identity_files(int $requestId): array
 {
-    return db_all('SELECT * FROM identity_files WHERE request_id = ? AND deleted_at IS NULL ORDER BY side', [$requestId]);
+    return db_all('SELECT * FROM identity_files WHERE request_id = ? AND deleted_at IS NULL ORDER BY CASE side WHEN \'front\' THEN 0 ELSE 1 END, id', [$requestId]);
 }
 
 function identity_file_get(int $fileId): ?array
@@ -489,6 +491,13 @@ function vault_archive_file(int $fileId): void
 function identity_archive_request(int $requestId): array
 {
     $out = ['archived' => 0, 'failed' => 0, 'errors' => []];
+    $req = identity_request_get($requestId);
+    if ($req === null || !in_array($req['status'], ['verified', 'archived'], true)) {
+        // Files of a request that has not been verified yet must stay available for the review (and for the upload gate).
+        $out['failed'] = 1;
+        $out['errors'][] = 'request is not verified yet';
+        return $out;
+    }
     foreach (identity_files($requestId) as $f) {
         try {
             vault_archive_file((int) $f['id']);

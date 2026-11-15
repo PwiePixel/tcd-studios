@@ -68,18 +68,31 @@ if (is_post()) {
         if ($hold === !empty($customer['legal_hold']) && ($hold === false || $note === (string) $customer['legal_hold_note'])) {
             redirect($self, ['error' => __('Nothing changed.')]);
         }
-        db_transaction(static function () use ($id, $hold, $note) {
-            db_exec('UPDATE users SET legal_hold = ?, legal_hold_note = ? WHERE id = ?', [$hold ? 1 : 0, $hold ? $note : '', $id]);
-            // A deletion request that waits for the hold is released again (and parked while the hold is set).
-            db_exec('UPDATE deletion_requests SET status = ? WHERE user_id = ? AND status = ?', $hold ? ['on_hold', $id, 'confirmed'] : ['confirmed', $id, 'on_hold']);
-        });
-        // The reason is stored with the account (erased with it); the audit log only records that and when.
-        audit($hold ? 'customer.legal_hold_set' : 'customer.legal_hold_cleared', 'user', $id, ['note_length' => $hold ? str_len($note) : 0]);
-        $waiting = termination_pending($id) !== null;
+        if (!$hold) {
+            audit('customer.legal_hold_cleared', 'user', $id, ['note_length' => 0]);   // before: releasing may run a waiting erasure
+        }
+        $res = legal_hold_set($id, $hold, $note);
+        if (!$res['ok'] && $res['status'] === 'error' && !$hold && user_get($id) !== null) {
+            // The hold is released, but the deletion that was waiting for it failed (storage system): the admin can retry with "Erase now".
+            redirect($self, ['error' => sprintf(__('The legal hold was released, but the waiting deletion could not be completed: %s Use "Erase now" to retry.'), $res['error'])]);
+        }
+        if (!$res['ok']) {
+            redirect($self, ['error' => $res['error'] !== '' ? $res['error'] : __('The legal hold could not be changed.')]);
+        }
+        if ($res['erased']) {
+            audit('customer.legal_hold_released_erased', 'erased-user', (string) $id, []);
+            redirect('/admin/customers.php', ['ok' => __('The legal hold was released – the waiting deletion was executed and all data of this customer has been erased.')]);
+        }
+        if ($hold) {
+            // A deletion that the customer confirmed is parked while the hold is set.
+            db_exec('UPDATE deletion_requests SET status = \'on_hold\' WHERE user_id = ? AND status = \'confirmed\'', [$id]);
+            // The reason is stored with the account (erased with it); the audit log only records that and when.
+            audit('customer.legal_hold_set', 'user', $id, ['note_length' => str_len($note)]);
+        }
         redirect($self, ['ok' => $hold
             ? __('The legal hold is set. Automatic erasure of this customer\'s data is blocked until you remove it.')
-            : ($waiting
-                ? __('The legal hold was removed. The customer\'s deletion request is waiting: use "Erase now" to complete it.')
+            : (termination_pending($id) !== null
+                ? __('The legal hold was removed. The customer\'s deletion request is not confirmed yet; it runs automatically after the customer confirms it.')
                 : __('The legal hold was removed.'))]);
     }
     if ($action === 'erase') {

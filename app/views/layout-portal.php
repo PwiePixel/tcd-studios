@@ -6,7 +6,7 @@ $base = $isAdmin ? '/admin/' : '/portal/';
 $nav = $isAdmin
     ? [
         ['index.php', __('Dashboard')], ['reviews.php', __('Reviews')], ['profiles.php', __('Imprints')],
-        ['customers.php', __('Customers')], ['requests.php', __('Requests')], ['services.php', __('Services')],
+        ['customers.php', __('Customers')], ['requests.php', __('Requests')], ['services.php', __('Services')], ['vault.php', __('ID vault')],
         ['audit.php', __('Audit log')], ['settings.php', __('Settings')],
     ]
     : [['dashboard.php', __('Dashboard')], ['services.php', __('Services')], ['account.php', __('Account')]];

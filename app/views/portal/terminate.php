@@ -1,8 +1,8 @@
 <?php
 /**
- * @var string $mode start|requested|confirm|retry|hold|invalid_link
+ * @var string $mode start|requested|confirm|retry|hold
  * @var array{status:string,created_at:?int,link_until:?int,link_valid:bool,legal_hold:bool} $state
- * @var string $token @var array<string,string> $errors @var string $formError @var string $holdMessage
+ * @var string $token @var bool $badLink @var array<string,string> $errors @var string $formError @var string $holdMessage
  * @var string[] $effects @var string $email @var int $linkHours
  */
 defined('TCD_APP') || exit;
@@ -13,6 +13,12 @@ defined('TCD_APP') || exit;
 
 <?php if ($formError !== ''): ?>
   <div class="pf-flash pf-flash--error" role="alert" id="terminate-error"><?= h($formError) ?></div>
+<?php endif; ?>
+<?php if ($badLink): ?>
+  <div class="pf-notice" id="terminate-invalid-link">
+    <strong><?= h(__('This confirmation link is not valid any more.')) ?></strong>
+    <?= h(__('It may have expired, been used, or a newer link was sent. Nothing has been deleted. You can request a new link below.')) ?>
+  </div>
 <?php endif; ?>
 
 <?php if ($mode === 'hold'): ?>
@@ -74,7 +80,7 @@ defined('TCD_APP') || exit;
     </form>
   </div>
 
-<?php else: /* start | requested | invalid_link */ ?>
+<?php else: /* start | requested */ ?>
 <?php if ($mode === 'requested'): ?>
   <div class="pf-notice pf-notice--info" id="terminate-requested">
     <strong><?= h(__('Request received: confirmation link mailed.')) ?></strong>
@@ -85,11 +91,6 @@ defined('TCD_APP') || exit;
     <strong><?= h(__('The link has expired. Please request a new one.')) ?></strong>
 <?php endif; ?>
     <?= h(__('Nothing has been deleted yet.')) ?>
-  </div>
-<?php elseif ($mode === 'invalid_link'): ?>
-  <div class="pf-notice" id="terminate-invalid-link">
-    <strong><?= h(__('This confirmation link is not valid any more.')) ?></strong>
-    <?= h(__('It may have expired or a newer link was sent. Please request a new link below. Nothing has been deleted.')) ?>
   </div>
 <?php endif; ?>
 

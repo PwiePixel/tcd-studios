@@ -47,6 +47,9 @@ if ($profile !== null) {
 }
 $verifier = $req['verified_by'] !== null ? user_get((int) $req['verified_by']) : null;
 $files = identity_files($id);
+usort($files, static function (array $a, array $b): int {      // front before back (the core orders by side name)
+    return [$a['side'] === 'front' ? 0 : 1, (int) $a['id']] <=> [$b['side'] === 'front' ? 0 : 1, (int) $b['id']];
+});
 $pending = 0;                       // files that should be in the archive but still have a web server copy
 foreach ($files as $f) {
     if ($f['inbox_name'] !== null && $f['inbox_name'] !== '' && in_array($req['status'], ['verified', 'archived'], true)) {

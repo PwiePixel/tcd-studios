@@ -36,14 +36,16 @@ $canForm = $state['can_upload'] && $vaultReady;
 <?php if ($state['files'] !== []): ?>
       <div class="pf-table-wrap">
         <table class="pf-table" id="identity-files">
-          <thead><tr><th><?= h(__('Image')) ?></th><th><?= h(__('Uploaded')) ?></th><th><?= h(__('Size')) ?></th><th><?= h(__('Stored')) ?></th><th></th></tr></thead>
+          <thead><tr><th><?= h(__('Image')) ?></th><th><?= h(__('Uploaded')) ?></th><th><?= h(__('Size')) ?></th><th></th></tr></thead>
           <tbody>
           <?php foreach ($state['files'] as $f): ?>
             <tr>
-              <td><strong><?= h($sideLabels[$f['side']] ?? $f['side']) ?></strong></td>
-              <td><?= h(fmt_time((int) $f['created_at'])) ?></td>
-              <td><?= h(portal_identity_size((int) $f['size'])) ?></td>
-              <td><?= h($f['archived'] ? __('Secure archive, encrypted') : __('Web server, encrypted (temporary)')) ?></td>
+              <td>
+                <strong><?= h($sideLabels[$f['side']] ?? $f['side']) ?></strong>
+                <div class="pf-small pf-muted"><?= h($f['archived'] ? __('Secure archive, encrypted') : __('Web server, encrypted (temporary)')) ?></div>
+              </td>
+              <td class="pf-nowrap"><?= h(fmt_time((int) $f['created_at'])) ?></td>
+              <td class="pf-nowrap"><?= h(portal_identity_size((int) $f['size'])) ?></td>
               <td class="pf-num">
               <?php if ($state['can_remove']): ?>
                 <form class="pf-inline-form" method="post" action="<?= h($action) ?>">

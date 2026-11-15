@@ -34,13 +34,14 @@ $jsVersion = (int) @filemtime(TCD_ROOT . '/js/vault.js');
     <dt><?= h(__('Archive driver')) ?></dt>
     <dd><?= h($status['driver'] === 's3' ? __('S3-compatible object storage') : __('Directory')) ?></dd>
     <dt><?= h(__('Archive location')) ?></dt>
-    <dd class="pf-pre"><code><?= h($status['location']) ?></code>
+    <dd class="pf-break"><code><?= h($status['location']) ?></code>
       <?php if ($status['driver'] === 'directory'): ?>
-        <br>
+        <div class="pf-badges">
         <?php if ($status['in_web_root']): ?><span class="pf-badge pf-badge--rejected"><?= h(__('inside the web root')) ?></span>
         <?php else: ?><span class="pf-badge pf-badge--ok"><?= h(__('outside the web root')) ?></span><?php endif; ?>
         <?php if ($status['dir_writable'] === true): ?><span class="pf-badge pf-badge--ok"><?= h(__('writable')) ?></span>
         <?php else: ?><span class="pf-badge pf-badge--rejected"><?= h($status['dir_exists'] ? __('not writable') : __('does not exist yet')) ?></span><?php endif; ?>
+        </div>
       <?php endif; ?></dd>
     <dt><?= h(__('Files in the web server inbox')) ?></dt>
     <dd><strong><?= (int) $status['inbox_files'] ?></strong>

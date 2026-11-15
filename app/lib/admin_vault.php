@@ -117,7 +117,7 @@ function admin_vault_status(): array
         $s['location'] = $dir;
         $s['s3_missing'] = [];
         $s['dir_exists'] = is_dir($dir);
-        $s['dir_writable'] = admin_dir_writable($dir);
+        $s['dir_writable'] = is_dir($dir) ? is_writable($dir) : (!file_exists($dir) && admin_dir_writable($dir));
         $s['in_web_root'] = admin_path_inside_web_root($dir);
     }
 

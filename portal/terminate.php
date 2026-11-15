@@ -101,8 +101,6 @@ if ($pending === null) {
     $mode = 'retry';
 } elseif ($pending['status'] === 'on_hold') {
     $mode = 'hold';
-} elseif ($token !== '') {
-    $mode = 'invalid_link';
 } else {
     $mode = 'requested';
 }
@@ -112,6 +110,7 @@ render_view('portal/terminate', [
     'mode'        => $mode,
     'state'       => $state,
     'token'       => $tokenValid ? $token : '',
+    'badLink'     => $token !== '' && !$tokenValid && $mode !== 'hold' && $mode !== 'retry' && $formError === '',
     'errors'      => $errors,
     'formError'   => $formError,
     'holdMessage' => $holdMessage,

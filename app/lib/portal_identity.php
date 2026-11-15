@@ -49,6 +49,9 @@ function portal_identity_state(array $profile): array
             }
         }
     }
+    usort($files, static function (array $a, array $b): int {
+        return strcmp((string) $b['side'], (string) $a['side']);      // front before back
+    });
     if ($status === 'uploaded' && $files === []) {
         $status = 'none';                       // an open request without any image counts as "not started"
     }

@@ -46,3 +46,5 @@
 @media (max-width: 800px) {
   .pf-grid--identity { grid-template-columns: minmax(0, 1fr); }
 }
+.pf-nowrap { white-space: nowrap; }
+.pf-card h2 .pf-badge { margin-left: 8px; vertical-align: middle; }

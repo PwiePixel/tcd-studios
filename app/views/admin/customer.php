@@ -49,14 +49,14 @@ $status = (string) $customer['status'];
 <?php $hold = !empty($customer['legal_hold']); ?>
 <?php if ($deletion !== null): ?>
   <div class="pf-notice<?= $hold ? ' pf-notice--warn' : '' ?>"><strong><?= h(__('The customer asked to end the service.')) ?></strong>
-    <?= h(sprintf(__('Deletion request #%d (%s), requested %s.'), (int) $deletion['id'], admin_deletion_labels()[(string) $deletion['status']] ?? (string) $deletion['status'], fmt_time((int) $deletion['created_at']))) ?>
+    <?= h(sprintf(__('Deletion request #%d, status: %s, requested %s.'), (int) $deletion['id'], admin_deletion_labels()[(string) $deletion['status']] ?? (string) $deletion['status'], fmt_time((int) $deletion['created_at']))) ?>
     <?= h($hold ? __('The automatic erasure is blocked by the legal hold below.') : __('Use "Erase now" below to complete it.')) ?></div>
 <?php endif; ?>
 
 <div class="pf-grid pf-grid--2">
   <section class="pf-card<?= $hold ? ' pf-card--warn' : '' ?>" id="legal-hold">
     <h2><?= h(__('Legal hold')) ?> <?= $hold ? '<span class="pf-badge pf-badge--suspended">' . h(__('active')) . '</span>' : '' ?></h2>
-    <p class="pf-muted"><?= h(__('A legal hold blocks the automatic erasure of all data of this customer (account, address data, ID documents), also when the customer ends the service. Use it for an open claim or an authority request: we keep the data so that we can still name the responsible person.')) ?></p>
+    <p class="pf-muted"><?= h(__('A legal hold blocks the automatic erasure of all data of this customer (account, address data, ID documents), also when the customer ends the service. Use it for an open claim or an authority request: we keep the data so that we can still name the responsible person. If the customer had already confirmed the deletion, removing the hold runs it immediately.')) ?></p>
     <form class="pf-form" method="post" action="<?= h($self) ?>"><?= csrf_field() ?><input type="hidden" name="action" value="legal_hold">
       <div class="pf-check">
         <input type="checkbox" id="hold" name="hold" value="1"<?= $hold ? ' checked' : '' ?>>
