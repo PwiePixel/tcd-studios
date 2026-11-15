@@ -17,6 +17,10 @@ Weitere Dienste (Creator-Schutz allgemein: „coming soon“; **Shops: nur auf A
 - **AGB** (`/agb/` DE verbindlich, `/terms/` EN): Zustimmung wird je Nutzer gespeichert (`users.terms_accepted_at`,
   `users.terms_version`); `config('terms_version')` erhöhen → erneute Zustimmung vor neuem Profil/Einreichen.
 
+AGB-Zustimmung: Registrierung (Pflicht-Häkchen `accept_terms`) speichert `terms_accepted_at` + `terms_version`; `portal/terms.php` holt
+die Zustimmung zur aktuellen Version nach (`app/lib/portal_terms.php`: `portal_require_terms()` sperrt „Profil anlegen“ und „Einreichen“).
+Texte: `app/views/site/agb.php` (DE, verbindlich), `terms.php` (EN), Controller `app/lib/site_terms.php`, Styles `css/legal-text.css`.
+
 ## Verzeichnisse
 ```
 app/                  Code (per .htaccess gesperrt). bootstrap.php lädt app/lib/*.php
@@ -49,7 +53,7 @@ css/portal.css        Styles Portal/Admin (Klassen unten)
   `privacy-policy@` (Datenschutz), `no-reply@` (Absender).
 
 ## Datenmodell (SQLite, Schema in app/lib/db.php → `db_schema_steps()`)
-users(id,email UNIQUE,name,password_hash,role customer|admin,status pending|active|disabled,email_verified_at,totp_secret,totp_enabled,created_at,last_login_at)
+users(id,email UNIQUE,name,password_hash,role customer|admin,status pending|active|disabled,email_verified_at,totp_secret,totp_enabled,created_at,last_login_at,session_epoch,terms_accepted_at,terms_version)
 tokens(id,user_id,type verify|reset,token_hash UNIQUE,expires_at,used_at,created_at)
 profiles(id,owner_id NULL,slug UNIQUE,status draft|pending|live|suspended|withdrawn,live_revision_id NULL,identity_verified,created_at,updated_at,published_at)
 revisions(id,profile_id,number,state draft|submitted|approved|rejected|superseded,public_json,private_json,submitted_at,reviewed_at,reviewed_by,review_note,created_at,updated_at)

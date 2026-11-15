@@ -9,6 +9,8 @@
 .pf-notice strong { font-weight: 700; }
 .pf-notice .pf-list { margin: 8px 0 0; }
 .pf-notice p:last-child { margin-bottom: 0; }
+.pf-notice .pf-actions { margin: 10px 0 0; }
+.pf-card > .pf-list { margin: 0 0 16px; }
 .pf-table code { font-size: .85em; background: #f1f1f1; padding: 1px 6px; border-radius: 3px; }
 
 /* Link manager in the imprint editor */

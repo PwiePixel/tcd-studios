@@ -9,6 +9,8 @@ Website von **TCD-Studio/Agency** unter **https://tcd-studio.de**.
 
 Die Seite ist ein statischer Webauftritt (HTML/CSS/JS) mit einem kleinen PHP-Backend für das Kontaktformular – und
 dem **Impressumsschutz-System** (Kundenbereich + Admin-Panel), siehe unten und **[docs/BETRIEB.md](docs/BETRIEB.md)**.
+Impressumsschutz gibt es **für alle Creator (und nur für Creator)**, mit AGB (`/agb/` Deutsch, `/terms/` Englisch); für **Shops nur
+auf Anfrage**, künftige Shop-Zahlungen sind **über die Stripe-API geplant** (noch nicht umgesetzt).
 Die Seite wurde aus einem IONOS-Sitejet-Export übernommen und für tcd-studio.de neu aufgesetzt. Das Design ist
 unverändert (per Screenshot-Vergleich gegen das Original geprüft: 8 Seiten × 3 Bildschirmgrößen; abweichend
 sind nur die neuen Hinweistexte und die geänderten Domains/E-Mail-Adressen). Bewusst entfernt wurde der
