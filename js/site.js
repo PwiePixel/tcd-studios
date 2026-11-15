@@ -20,6 +20,7 @@
   document.addEventListener('touchstart', function () {}, false);
 
   $(function () {
+    fixNextLinkTargets();
     $('.menu-wrapper').each(function () {
       initMenu($(this));
     });
@@ -29,6 +30,30 @@
   /* ------------------------------------------------------------------ */
   /* Menu                                                                */
   /* ------------------------------------------------------------------ */
+
+  /**
+   * The Webcard runtime finds the target of a "#!next" link ("scroll to the next block")
+   * through `nextSibling`. In readable, indented markup that is a whitespace text node and
+   * the link stops working with a JavaScript error. Remove the whitespace-only text nodes
+   * the runtime would walk over; between block elements they have no effect on the layout.
+   */
+  function fixNextLinkTargets() {
+    $('a[href="#!next"]').each(function () {
+      var element = this.parentNode && this.parentNode.closest('.ed-element');
+
+      while (element) {
+        while (isBlankText(element.nextSibling)) {
+          element.parentNode.removeChild(element.nextSibling);
+        }
+        if (element.nextSibling) return; // the runtime stops at the first sibling it finds
+        element = element.parentNode && element.parentNode.closest('.ed-element');
+      }
+    });
+  }
+
+  function isBlankText(node) {
+    return !!node && node.nodeType === Node.TEXT_NODE && !node.nodeValue.trim();
+  }
 
   function initMenu($menuWrapper) {
     var $body = $('body');
