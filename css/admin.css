@@ -52,3 +52,6 @@
   .pf-codes { grid-template-columns: 1fr; }
   .pf-row--nowrap { flex-wrap: wrap; }
 }
+
+/* Grid items may shrink below their content width (wide tables scroll inside .pf-table-wrap instead of the page) */
+.pf-grid > * { min-width: 0; }

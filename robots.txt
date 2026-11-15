@@ -2,5 +2,7 @@ User-agent: *
 Allow: /
 Disallow: /api.php
 Disallow: /backend/
+Disallow: /portal/
+Disallow: /admin/
 
 Sitemap: https://tcd-studio.de/sitemap.xml

@@ -18,6 +18,7 @@ $privLabels = [
   <h1><?= h((string) ($pub['display_name'] ?? $profile['slug'])) ?> <span class="pf-muted pf-title-sub">v<?= (int) $rev['number'] ?></span></h1>
   <div><?= status_badge((string) $rev['state']) ?> <?= status_badge((string) $profile['status']) ?></div>
 </div>
+<?php if ($rev['state'] === 'submitted'): ?><p><a href="#decision"><?= h(__('Jump to the decision')) ?> &darr;</a></p><?php endif; ?>
 
 <?php if ($formError !== ''): ?><div class="pf-flash pf-flash--error" role="alert"><?= h($formError) ?></div><?php endif; ?>
 <?php if ($rev['state'] !== 'submitted'): ?>
@@ -81,7 +82,7 @@ $privLabels = [
 </section>
 
 <?php if ($rev['state'] === 'submitted'): ?>
-<section class="pf-card pf-card--accent">
+<section class="pf-card pf-card--accent" id="decision">
   <h2><?= h(__('Decision')) ?></h2>
   <form class="pf-form pf-wide-form" method="post" action="<?= h($self) ?>">
     <?= csrf_field() ?>

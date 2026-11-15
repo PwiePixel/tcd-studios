@@ -214,7 +214,7 @@ function site_page_shops(): void
 
     if (is_post()) {
         foreach (array_keys($values) as $k) {
-            $values[$k] = post_str($k, $k === 'message' ? 2000 : 300);
+            $values[$k] = post_str($k, $k === 'message' ? 2100 : 300);
         }
         $values['email'] = mb_strtolower($values['email'], 'UTF-8');
 
