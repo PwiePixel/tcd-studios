@@ -1,0 +1,4 @@
+# Runtime data (database, setup token, local config, logs) is never committed
+/data/*
+!/data/.htaccess
+!/data/.gitkeep
