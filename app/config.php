@@ -41,6 +41,9 @@ return [
         'max_upload_bytes' => 8388608,   // 8 MB per image
         'require_https'    => true,      // refuse ID uploads over plain http
     ],
+    // Set to true ONLY if the site runs behind a TLS-terminating proxy/CDN that sets X-Forwarded-Proto (otherwise the app would
+    // consider the connection insecure and refuse ID uploads). Put it in data/config.local.php.
+    'trust_forwarded_proto' => false,
     'termination_token_hours' => 24,     // validity of the confirmation link when a customer ends the service
 
     'password_min_length' => 10,

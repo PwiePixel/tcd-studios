@@ -66,6 +66,8 @@ function portal_identity_state(array $profile): array
     // An archived check does not cover changed name/address data: a new photo is needed (a new request is opened).
     $newCheck = $status === 'archived' && $required;
     $locked = ($done && !$newCheck) || ($status === 'none' && $verifiedProfile && !$required);
+    // While a submission is under review the images must not change: the team decides on exactly what it looked at.
+    $underReview = $open !== null && $open['state'] === 'submitted';
 
     if ($status === 'rejected') {
         $step = 'rejected';
@@ -89,8 +91,9 @@ function portal_identity_state(array $profile): array
         'required'         => $required,
         'present'          => $present,
         'locked'           => $locked,
-        'can_upload'       => !$suspended && !$locked,
-        'can_remove'       => $status === 'uploaded' && $files !== [] && !$suspended,
+        'under_review'     => $underReview,
+        'can_upload'       => !$suspended && !$locked && !$underReview,
+        'can_remove'       => $status === 'uploaded' && $files !== [] && !$suspended && !$underReview,
         'verified_profile' => $verifiedProfile,
         'archived_at'      => $archivedAt,
         // The customer still has something to do before the draft can be submitted.

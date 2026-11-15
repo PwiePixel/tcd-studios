@@ -26,6 +26,7 @@ if (is_post()) {
     $action = post_str('action', 20);
     $noteValue = post_str('note', 2000);
     $fingerprint = post_str('fp', 80);      // what the admin saw; see revision_fingerprint()
+    $idFingerprint = post_str('fp_id', 80); // the ID images the admin saw; see identity_fingerprint()
     $owner = $profile['owner_id'] !== null ? user_get((int) $profile['owner_id']) : null;
     $pid = (int) $profile['id'];
     $title = (string) ($rev['public']['display_name'] ?? $profile['slug']);
@@ -52,10 +53,13 @@ if (is_post()) {
             $formError = __('Please describe the other proof of identity in the note field (for example "video identification on 2026-11-15"). Do not copy personal data into it.');
         } else {
             try {
-                db_transaction(static function () use ($id, $pid, $admin, $noteValue, $fingerprint) {
+                db_transaction(static function () use ($id, $pid, $admin, $noteValue, $fingerprint, $idFingerprint) {
                     $fresh = db_one('SELECT state FROM revisions WHERE id = ?', [$id]);
                     if (!$fresh || $fresh['state'] !== 'submitted') {
                         throw new RuntimeException('already processed', ADMIN_STATE_CONFLICT);
+                    }
+                    if (!hash_equals(identity_fingerprint($pid), $idFingerprint)) {
+                        throw new RuntimeException('content changed');      // the customer changed the ID images after the page was opened
                     }
                     revision_approve($id, (int) $admin['id'], $noteValue, $fingerprint);
                     db_exec('UPDATE profiles SET identity_verified = 1 WHERE id = ?', [$pid]);

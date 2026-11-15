@@ -94,7 +94,8 @@ greifen (Apache) – die Datenbankdatei hat einen zufälligen Namen. Regelmäßi
 ## Ausweisprüfung und Löschung
 
 Kunden müssen Identität und Anschrift nachweisen: Sie geben Name und Anschrift im Kundenportal ein und laden ein **Foto ihres
-Ausweises** (Vorder- und Rückseite) über ein verschlüsseltes Formular hoch. Das Foto ist so geschützt, dass der Webserver es
+Ausweises** (Vorder- und Rückseite; mindestens ein Bild ist Pflicht, bei Ausweisen ohne Anschrift auf der Vorderseite wird die Rückseite
+oder ein Anschriftsnachweis gebraucht) über ein verschlüsseltes Formular hoch. Das Foto ist so geschützt, dass der Webserver es
 nach dem Hochladen nicht mehr lesen kann. Warum wir die Daten speichern: Wir sind nur die Management-Adresse (Postfach) und der
 Schutz vor der Veröffentlichung der Privatadresse; bei Missbrauch (rechtswidrige Inhalte, Ansprüche, Behördenanfragen) müssen wir
 die verantwortliche Person benennen können (AGB § 5, Datenschutzerklärung).
@@ -115,6 +116,10 @@ Technik im Detail: `app/lib/crypt.php`, `vault.php`, `erase.php`, [ARCHITECTURE.
 
 Weitere Maßnahmen: Adressdaten liegen verschlüsselt in der Datenbank (libsodium, Schlüssel `data_key`); Zugriff nur für Admins
 (Zwei-Faktor-Anmeldung möglich); SQLite `secure_delete` ist an (gelöschte Zeilen werden überschrieben).
+Außerdem: Die **Freigabe ist an den geprüften Stand gebunden** (Prüfsummen über Antrag und Ausweisdateien: ändert der Kunde zwischen Öffnen
+und Freigeben etwas, wird die Freigabe verweigert). Während eine Einreichung geprüft wird, kann der Kunde die Ausweisbilder nicht mehr
+austauschen. Ein **Austausch des öffentlichen Vault-Schlüssels** verlangt zusätzlich das Admin-Passwort. Der Eingang des Webservers wird
+täglich aufgeräumt: **nie geprüfte Uploads werden nach 14 Tagen gelöscht** (`tools/maintenance.php`, siehe „Betriebsaufgaben“).
 
 ### Einmalige Einrichtung
 
@@ -177,8 +182,9 @@ Besteht ein Grund, Daten aufzubewahren (offener Rechtsanspruch, Behördenanfrage
 **Customers → Kunde → „Legal hold“** das Häkchen und trägt den **Grund** ein (Pflichtfeld, keine Personendaten hineinkopieren; die Notiz wird
 mit dem Konto gelöscht). Solange der Legal Hold gilt, wird **keine** Löschung ausgeführt – auch nicht, wenn der Kunde den Dienst beendet:
 der Löschantrag bekommt den Status „on hold“, der Kunde sieht den Hinweis, dass wir einige Daten vorerst aufbewahren müssen, und
-„Erase now“ ist gesperrt. Fällt der Grund weg, den Legal Hold wieder entfernen. **Die wartende Löschung wird nicht von selbst
-nachgeholt:** danach in der Kundenansicht **„Erase now“** ausführen (zur Bestätigung die E-Mail-Adresse des Kunden eintippen). Nur für den
+„Erase now“ ist gesperrt. Fällt der Grund weg, den Legal Hold wieder entfernen. **Wartet eine vom Kunden bereits bestätigte Löschung,
+wird sie beim Entfernen des Legal Hold sofort automatisch ausgeführt** (der Kunde hatte ja schon zugestimmt; die Aktion steht im Audit-Log
+als `erase.after_hold_release`). Scheitert sie technisch, bleibt der Antrag offen und lässt sich mit **„Erase now“** wiederholen. Nur für den
 dokumentierten Grund aufbewahren und den Fall regelmäßig prüfen. Das Dashboard zählt offene Löschanträge, Löschanträge „on hold“ und Kunden
 unter Legal Hold (Liste: Requests → Deletions).
 
@@ -190,8 +196,10 @@ unter Legal Hold (Liste: Requests → Deletions).
 2. Der Kunde öffnet den Link (angemeldet), setzt das Häkchen, gibt sein Passwort ein und **bestätigt** damit, dass der Dienst endet, alles
    unwiderruflich gelöscht wird und er den Dienst nicht mehr nutzen darf. Ohne Bestätigung passiert nichts.
 3. Danach läuft **automatisch und unwiderruflich** die Löschung; der Kunde erhält eine letzte Bestätigungs-E-Mail. Scheitert dabei
-   ein Speichersystem (z. B. Archiv nicht erreichbar), wird **nichts** halb gelöscht: der Vorgang bricht ab, der Kunde sieht eine
-   Fehlermeldung und kann es erneut versuchen; im Server-Log (`error_log`) steht der Grund. Mit Legal Hold siehe oben.
+   ein Speichersystem (z. B. Archiv nicht erreichbar), bricht der Vorgang ab, **bevor** Datenbank-Daten gelöscht werden: Seiten können
+   dann schon offline und einzelne Ausweisdateien schon gelöscht sein, Konto und Adressdaten bleiben bestehen. Der Kunde sieht eine
+   ehrliche Fehlermeldung („Teile können bereits gelöscht sein – bitte erneut versuchen“), der Vorgang ist **gefahrlos wiederholbar**
+   (bereits gelöschte Dateien werden übersprungen); im Server-Log (`error_log`) steht der Grund. Mit Legal Hold siehe oben.
 4. Sonderfall: Eine Kündigung per E-Mail oder durch uns (AGB § 7 Abs. 2 letzter Teil, 3, 4, 7) löst **keine** automatische Löschung aus; die
    Daten sind nach Vertragsende zu löschen, sobald sie nicht mehr gebraucht werden (nicht mehr für gesetzliche Pflichten oder Rechtsansprüche).
    Das ist dann eine **manuelle Aufgabe** des Betreibers: Customers → Kunde → **„Erase now – irrevocable“** (E-Mail-Adresse zur Bestätigung
@@ -206,12 +214,34 @@ der Seitenname (Slug) in den Einträgen bleiben jedoch erhalten**; ein Löschnac
 **Nicht vom System erfasst:** Backups (werden im Sicherungszyklus überschrieben), gesendete Mails (Mailserver, Postfach `imprint@`),
 Server-Logfiles des Hosters, Kopien Dritter von bereits veröffentlichten Impressumsseiten (Suchmaschinen, Archive).
 
+### Betriebsaufgaben und Server-Einstellungen
+
+- **Cronjob (täglich):** `php /pfad/zur/seite/tools/maintenance.php` – löscht nie geprüfte Ausweis-Uploads (älter als 14 Tage) aus dem
+  Eingang des Webservers und räumt alte Zähler des Missbrauchsschutzes auf. Das Skript läuft nur auf der Kommandozeile.
+  Ohne Cronjob läuft die Aufräumroutine nur gelegentlich nebenbei bei Seitenaufrufen.
+- **Upload-Grenzen:** Pro Bild sind 8 MB erlaubt (`vault.max_upload_bytes`). Der Server (`upload_max_filesize`, `post_max_size`,
+  ggf. `portal/.user.ini`) muss Anfragen von mindestens 17 MB zulassen, sonst sieht der Kunde nur die Meldung „Der Upload war zu groß“.
+  Erfolgreiche Uploads sind auf 12 pro Stunde und Kunde begrenzt.
+- **Reverse-Proxy/Load-Balancer:** `trust_forwarded_proto` in `data/config.local.php` nur auf `true` setzen, wenn **alle** Anfragen
+  über einen vertrauenswürdigen Proxy kommen, der `X-Forwarded-Proto` selbst setzt. Sonst könnte ein Client „https“ vortäuschen
+  und die HTTPS-Pflicht für Ausweis-Uploads umgehen. Ohne Proxy auf `false` lassen (Standard).
+- **`data/` schützen:** Der Ordner muss vom Webserver **nicht ausgeliefert** werden (`.htaccess` genügt nur bei Apache). Besser ist
+  ein Verzeichnis außerhalb des Webroots (Umgebungsvariable `TCD_DATA_DIR`). Der Chiffretext der Ausweise bindet keine Zusatzdaten
+  (AAD) an die Datenbankzeile; das ist bekannt und unkritisch, solange die Datenbank nicht manipuliert werden kann.
+- **PHP-OPcache:** Wird `data/config.local.php` von Hand geändert, danach PHP-FPM/Apache neu laden bzw. warten, bis OPcache neu liest.
+  Das System erkennt fehlende oder unlesbare Konfiguration und **erzeugt dann keinen neuen Datenschlüssel** (es bricht mit Fehler ab,
+  statt vorhandene verschlüsselte Daten unlesbar zu machen).
+
 ### Was getestet wurde – und was nicht
 
 *Geprüft* (lokal, Entwicklungsumgebung, mit erfundenen Testdaten und dem Archiv-Treiber `directory`): Schlüsselpaar → Upload zweier
 Bilder → Entschlüsselung mit dem privaten Schlüssel → Archivierung (Eingang danach leer, Archivdatei enthält nur Chiffretext) →
 Löschantrag → Bestätigung → Konto, Profile, Ausweisdateien (Eingang und Archiv) gelöscht, Audit-Log pseudonymisiert, Löschnachweis
-vorhanden → Legal Hold blockiert die Löschung. Außerdem: die Rechtstexte rendern ohne Fehler.
+vorhanden → Legal Hold blockiert die Löschung und gibt sie beim Aufheben frei. Außerdem: die Rechtstexte rendern ohne Fehler; ein
+S3-Archiv gegen einen **lokalen S3-Nachbau** (Signatur, PUT/GET/DELETE); automatisierte Tests von Kundenportal (511 Prüfungen),
+Admin-Bereich (394), Vault/Löschung (82) und ein kompletter Browser-Durchlauf Registrierung → Upload → Freigabe → Dienstende (62).
+Eine unabhängige Sicherheitsprüfung hat zwölf Befunde ergeben; sie wurden behoben (u. a. gebundene Freigabe, Schutz vor Verlust des
+Datenschlüssels, Passwort bei Schlüsseltausch, Upload-Grenzen, Löschung ohne Reste).
 
 *Nicht geprüft:* ein **echter S3-Anbieter** (Endpunkt-/Signatur-Eigenheiten, Versionierung); **echter Mailversand** (`mail()`,
 SPF/DKIM, Zustellung der Bestätigungs-Mail); der Betrieb in der **echten Hosting-Umgebung** (HTTPS, PHP-Limits, `open_basedir`,

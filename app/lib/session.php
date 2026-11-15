@@ -46,6 +46,14 @@ function session_boot(string $area): void
     }
     send_security_headers();
 
+    if (random_int(1, 150) === 1) {
+        try {
+            identity_inbox_gc();           // stale, never-reviewed ID uploads must not stay on the web server
+        } catch (Throwable $e) {
+            error_log('identity_inbox_gc failed: ' . $e->getMessage());
+        }
+    }
+
     $t = now();
     if (isset($_SESSION['last_seen']) && $t - (int) $_SESSION['last_seen'] > $idle) {
         $_SESSION = [];

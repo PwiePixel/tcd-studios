@@ -84,6 +84,7 @@ if (is_post()) {
             $newOwnerId = (int) $target['id'];
         }
         db_exec('UPDATE profiles SET owner_id = ?, updated_at = ? WHERE id = ?', [$newOwnerId, now(), $id]);
+        db_exec('UPDATE identity_requests SET user_id = ? WHERE profile_id = ?', [$newOwnerId, $id]);     // keep ID files findable for the new owner's erasure
         audit('profile.owner_changed', 'profile', $id, ['slug' => $slug, 'from_user' => $profile['owner_id'] !== null ? (int) $profile['owner_id'] : null, 'to_user' => $newOwnerId]);
         redirect($self, ['ok' => $newOwnerId === null ? __('The owner was removed.') : __('The owner was changed.')]);
     }
@@ -136,12 +137,25 @@ if (is_post()) {
         if (!safe_equals($slug, post_str('confirm_slug', 60))) {
             redirect($self, ['error' => __('To delete the imprint, type its page name exactly.')]);
         }
-        db_transaction(static function () use ($id) {
-            imprint_unpublish($id);
-            db_exec('DELETE FROM revisions WHERE profile_id = ?', [$id]);
-            db_exec('DELETE FROM profiles WHERE id = ?', [$id]);
-        });
-        audit('profile.delete', 'profile', $id, ['slug' => $slug, 'owner_user' => $profile['owner_id'] !== null ? (int) $profile['owner_id'] : null]);
+        try {
+            db_transaction(static function () use ($id, $slug, $profile) {
+                imprint_unpublish($id);
+                vault_delete_profile_files($id);                       // ID photos in inbox AND archive, whoever uploaded them
+                audit_scrub_profile($id, $slug, $profile['owner_id'] !== null ? (int) $profile['owner_id'] : null);
+                db_exec('DELETE FROM revisions WHERE profile_id = ?', [$id]);
+                db_exec('DELETE FROM identity_requests WHERE profile_id = ?', [$id]);
+                db_exec('DELETE FROM profiles WHERE id = ?', [$id]);
+            });
+        } catch (Throwable $e) {
+            error_log('admin profile delete failed: ' . $e->getMessage());
+            redirect($self, ['error' => __('The imprint could not be deleted completely (a storage system did not answer). Nothing else was removed; please try again.')]);
+        }
+        try {
+            imprint_try_sitemap();
+        } catch (Throwable $e) {
+            error_log('sitemap refresh failed: ' . $e->getMessage());
+        }
+        audit('profile.delete', 'profile', $id, []);
         redirect('/admin/profiles.php', ['ok' => sprintf(__('The imprint "%s" was deleted.'), $slug)]);
     }
 

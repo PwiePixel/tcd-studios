@@ -57,15 +57,9 @@ function config(string $key, $default = null)
     static $cfg = null;
     if ($cfg === null) {
         $cfg = require __DIR__ . '/../config.php';
-        $local = data_dir() . '/config.local.php';
-        if (is_file($local)) {
-            $over = (static function () use ($local) {
-                defined('TCD_APP') || exit;
-                return require $local;
-            })();
-            if (is_array($over)) {
-                $cfg = array_replace_recursive($cfg, $over);
-            }
+        $over = config_local_load();
+        if ($over !== []) {
+            $cfg = array_replace_recursive($cfg, $over);
         }
         $site = getenv('TCD_SITE_URL');
         if ($site !== false && $site !== '') {
@@ -83,6 +77,33 @@ function config(string $key, $default = null)
 }
 
 /**
+ * Load data/config.local.php fresh. PHP's opcache may serve an older copy of a file that was rewritten within the last
+ * seconds (opcache.revalidate_freq), which would make a freshly created value look "missing" - so the cache entry is
+ * invalidated first.
+ *
+ * @return array<string,mixed>
+ */
+function config_local_load(): array
+{
+    $local = data_dir() . '/config.local.php';
+    if (!is_file($local)) {
+        return [];
+    }
+    clearstatcache(true, $local);
+    if (function_exists('opcache_invalidate')) {
+        @opcache_invalidate($local, true);
+    }
+    $loaded = (static function () use ($local) {
+        return include $local;
+    })();
+    if (!is_array($loaded)) {
+        // Fail closed: treating an unreadable file as empty would let the caller overwrite it (losing the data key, S3 keys ...).
+        throw new RuntimeException('data/config.local.php exists but could not be read (syntax error?) - refusing to continue');
+    }
+    return $loaded;
+}
+
+/**
  * Read a value from data/config.local.php, creating it ONCE if it does not exist yet (race-free: two parallel first
  * requests must never generate two different values, e.g. two data keys).
  *
@@ -97,13 +118,7 @@ function config_local_get_or_create(string $key, callable $factory)
         throw new RuntimeException('Cannot lock data/config.local.lock (is data/ writable?)');
     }
     try {
-        $existing = [];
-        if (is_file($local)) {
-            $loaded = (static function () use ($local) {
-                return include $local;
-            })();
-            $existing = is_array($loaded) ? $loaded : [];
-        }
+        $existing = config_local_load();
         if (array_key_exists($key, $existing) && $existing[$key] !== '' && $existing[$key] !== null) {
             return $existing[$key];
         }
@@ -115,6 +130,9 @@ function config_local_get_or_create(string $key, callable $factory)
             throw new RuntimeException('Cannot write ' . $local);
         }
         @chmod($local, 0640);
+        if (function_exists('opcache_invalidate')) {
+            @opcache_invalidate($local, true);
+        }
         return $value;
     } finally {
         flock($lock, LOCK_UN);

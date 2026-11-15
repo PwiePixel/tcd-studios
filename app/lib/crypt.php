@@ -15,7 +15,29 @@ defined('TCD_APP') || exit;
 
 const CRYPT_PREFIX = 'enc1:';
 
-/** The 32-byte data key (created on first use). */
+/**
+ * Does the database already contain data encrypted with the data key? (Own read-only connection: this is called while the
+ * main connection may still be migrating.) Used to refuse generating a NEW key, which would make that data unreadable.
+ */
+function crypt_encrypted_data_exists(): bool
+{
+    $file = db_file();
+    if (!is_file($file) || filesize($file) === 0) {
+        return false;
+    }
+    try {
+        $pdo = new PDO('sqlite:' . $file, null, null, [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]);
+        $has = $pdo->query("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'revisions'")->fetchColumn();
+        if (!$has) {
+            return false;
+        }
+        return (bool) $pdo->query("SELECT 1 FROM revisions WHERE private_json LIKE 'enc1:%' LIMIT 1")->fetchColumn();
+    } catch (Throwable $e) {
+        return false;
+    }
+}
+
+/** The 32-byte data key (created on first use, never while encrypted data exists without it). */
 function crypt_key(): string
 {
     static $key = null;
@@ -24,6 +46,10 @@ function crypt_key(): string
     }
     $env = getenv('TCD_DATA_KEY');
     $b64 = ($env !== false && $env !== '') ? $env : (string) config_local_get_or_create('data_key', static function () {
+        if (crypt_encrypted_data_exists()) {
+            throw new RuntimeException('data_key is missing in data/config.local.php but encrypted data exists: refusing to create a new key '
+                . '(restore data/config.local.php from your backup).');
+        }
         return base64_encode(random_bytes(SODIUM_CRYPTO_SECRETBOX_KEYBYTES));
     });
     $raw = base64_decode($b64, true);

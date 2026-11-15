@@ -20,7 +20,9 @@ function is_https(): bool
     if (isset($_SERVER['SERVER_PORT']) && (string) $_SERVER['SERVER_PORT'] === '443') {
         return true;
     }
-    return isset($_SERVER['HTTP_X_FORWARDED_PROTO']) && strtolower((string) $_SERVER['HTTP_X_FORWARDED_PROTO']) === 'https';
+    // A client can send this header itself: honour it only behind a proxy the operator trusts (config 'trust_forwarded_proto').
+    return (bool) config('trust_forwarded_proto', false) && isset($_SERVER['HTTP_X_FORWARDED_PROTO'])
+        && strtolower((string) $_SERVER['HTTP_X_FORWARDED_PROTO']) === 'https';
 }
 
 function is_post(): bool

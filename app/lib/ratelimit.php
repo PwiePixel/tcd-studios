@@ -32,6 +32,14 @@ function rate_limit_hit(string $key, array $limit): bool
     });
 }
 
+/** Is the counter still below its limit? (does NOT count this call) */
+function rate_limit_peek(string $key, array $limit): bool
+{
+    [$max, $window] = $limit;
+    $row = db_one('SELECT hits, window_start FROM rate_limits WHERE k = ?', [substr($key, 0, 190)]);
+    return $row === null || now() - (int) $row['window_start'] >= $window || (int) $row['hits'] < $max;
+}
+
 /** Forget a counter (e.g. after a successful login). */
 function rate_limit_clear(string $key): void
 {

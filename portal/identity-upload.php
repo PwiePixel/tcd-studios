@@ -33,7 +33,7 @@ if ($action === 'remove') {
     if ($file['deleted_at'] !== null) {
         redirect($self, ['ok' => __('This image was already removed.')]);
     }
-    if ($request['status'] !== 'uploaded') {
+    if ($request['status'] !== 'uploaded' || !empty(portal_identity_state($profile)['under_review'])) {
         redirect($self, ['error' => __('Your images are already being checked and cannot be changed any more.')]);
     }
     try {
@@ -51,6 +51,9 @@ if ($action !== 'upload') {
 }
 
 $state = portal_identity_state($profile);
+if (!empty($state['under_review'])) {
+    redirect($self, ['error' => __('Your submission is being reviewed. The ID photos cannot be changed until the review is finished (you can withdraw the submission first).')]);
+}
 if (!vault_configured()) {
     redirect($self, ['error' => __('The identity check is temporarily unavailable. Please try again later.')]);
 }
@@ -61,6 +64,13 @@ if (!$state['can_upload']) {
     redirect($self, ['error' => (string) $profile['status'] === 'suspended'
         ? __('This imprint was suspended by our team. Please contact us.')
         : __('Your identity check is already complete. Nothing has to be uploaded.')]);
+}
+
+// Decoding a large image costs CPU and memory, so successful uploads are limited tightly (12/hour per customer); failed attempts
+// are cheap (they are refused before decoding) and only limited loosely.
+$limitOk = [12, 3600];
+if (!rate_limit_peek('idupload:ok:' . $uid, $limitOk) || !rate_limit_hit('idupload:try:' . $uid, [90, 3600]) || !rate_limit_hit('idupload:ip:' . client_ip(), [150, 3600])) {
+    redirect($self, ['error' => __('Too many uploads. Please try again in an hour.')]);
 }
 
 $errors = [];
@@ -100,6 +110,7 @@ if ($submitted !== []) {
     foreach ($submitted as $side => $upload) {
         try {
             vault_store_upload($rid, $side, $upload);
+            rate_limit_hit('idupload:ok:' . $uid, $limitOk);      // counts only images that were really decoded and stored
             $saved[] = $side;
             audit('identity.upload', 'profile', $pid, ['side' => $side]);
         } catch (InvalidArgumentException $e) {

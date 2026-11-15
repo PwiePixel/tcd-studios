@@ -42,6 +42,10 @@ Kundenbereich dazu: `portal/identity.php` (+ `identity-upload.php`) = Upload der
 `portal/terminate.php` / `terminated.php` = Dienst beenden (Antrag → Mail-Link → Bestätigung mit Passwort → automatische Löschung).
 Admin: `admin/vault.php` (Schlüssel/Archiv), `admin/identity.php` + `identity-file.php` + `js/vault.js` (Entschlüsselung im Browser), Legal hold und
 „Erase now“ in `admin/customer.php`, Löschanträge in `admin/requests.php`.
+Sicherheitsbindungen: Die Freigabe (`admin/review.php`) prüft zwei Prüfsummen (`fp` = Antragsinhalt, `fp_id` = `identity_fingerprint()` der Ausweisdateien),
+damit nur freigegeben wird, was der Admin gesehen hat; ein Schlüsseltausch in `admin/vault.php` verlangt das Admin-Passwort; `app/lib/util.php`
+(`config_local_load`, `config_local_get_or_create`) liest/ergänzt `data/config.local.php` unter Dateisperre, invalidiert OPcache und bricht bei unlesbarer
+Datei ab; `crypt_key()` erzeugt nie einen neuen Datenschlüssel, solange verschlüsselte Zeilen existieren. Tägliche Pflege: `tools/maintenance.php` (Cron).
 Upload-Limits: `portal/.user.ini` (9M/20M) – bei mod_php `upload_max_filesize=9M`, `post_max_size=20M` in der Server-Konfiguration setzen.
 
 ## Verzeichnisse

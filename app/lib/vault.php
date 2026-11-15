@@ -33,6 +33,9 @@ function vault_public_key_pem(): string
 /** Validate a public key. @return string|null error message or null if usable */
 function vault_validate_public_key(string $pem): ?string
 {
+    if (strncmp(ltrim($pem), '-----BEGIN PUBLIC KEY-----', 26) !== 0) {
+        return __('This is not a valid PEM public key.');     // also refuses file:// paths and certificates
+    }
     $key = @openssl_pkey_get_public($pem);
     if ($key === false) {
         return __('This is not a valid PEM public key.');
@@ -164,7 +167,7 @@ function vault_prepare_image(array $file): array
     @ini_set('memory_limit', '512M');
     $limit = ini_get('memory_limit');
     $bytes = $limit === '-1' ? PHP_INT_MAX : (int) $limit * (stripos((string) $limit, 'G') !== false ? 1073741824 : (stripos((string) $limit, 'K') !== false ? 1024 : 1048576));
-    if ($pixels > 50000000 || $pixels * 5 + 64 * 1048576 > $bytes) {
+    if ($pixels > 25000000 || $pixels * 5 + 64 * 1048576 > $bytes) {
         throw new InvalidArgumentException(__('The image is too large to process. Please reduce its size (for example to 12 megapixels) and try again.'));
     }
     $raw = file_get_contents($tmp);
@@ -251,7 +254,15 @@ function vault_archive_put(string $name, string $blob): string
         vault_s3_request('PUT', $key, $blob);
         return 's3:' . $key;
     }
-    $path = vault_archive_dir() . '/' . $name;
+    $dir = vault_archive_dir();
+    if (!is_dir($dir)) {
+        throw new RuntimeException('vault: the archive directory does not exist (is the storage volume mounted?)');
+    }
+    $sentinel = $dir . '/.tcd-vault';
+    if (!is_file($sentinel)) {
+        @file_put_contents($sentinel, "TCD identity vault archive. Do not delete this file.\n");
+    }
+    $path = $dir . '/' . $name;
     $tmp = $path . '.part';
     if (@file_put_contents($tmp, $blob, LOCK_EX) === false || !@rename($tmp, $path)) {
         throw new RuntimeException('vault: cannot write the archive file');
@@ -285,7 +296,17 @@ function vault_archive_delete(string $ref): void
     if (strncmp($ref, 'dir:', 4) !== 0 || !vault_valid_name($name)) {
         throw new RuntimeException('vault: bad archive reference');
     }
-    if (!vault_secure_unlink(vault_archive_dir() . '/' . $name)) {
+    $dir = vault_archive_dir();
+    $path = $dir . '/' . $name;
+    if (!is_file($path)) {
+        // A missing file only counts as deleted when the archive volume itself is provably the right one: an unmounted or
+        // empty volume must never make an erasure look successful while the ciphertext still exists somewhere else.
+        if (!is_dir($dir) || !is_file($dir . '/.tcd-vault')) {
+            throw new RuntimeException('vault: the archive volume is not available (sentinel file missing)');
+        }
+        return;
+    }
+    if (!vault_secure_unlink($path)) {
         throw new RuntimeException('vault: cannot delete the archive file');
     }
 }
@@ -347,7 +368,9 @@ function vault_s3_request(string $method, string $key, string $body): string
     if ($response === false) {
         throw new RuntimeException('vault: S3 transport error: ' . $error);
     }
-    if ($status >= 300 && !($method === 'DELETE' && $status === 404)) {
+    // A missing OBJECT counts as deleted; a missing bucket or any other 404 does not (wrong bucket/prefix must not look like success).
+    $missingKey = $method === 'DELETE' && $status === 404 && strpos((string) $response, 'NoSuchKey') !== false;
+    if ($status >= 300 && !$missingKey) {
         throw new RuntimeException('vault: S3 answered HTTP ' . $status);
     }
     return (string) $response;
@@ -556,6 +579,61 @@ function identity_required_for(array $profile, array $revision): bool
 /** Has the customer uploaded at least one document image for the open request of this profile? */
 function identity_upload_present(int $profileId): bool
 {
-    $req = db_one('SELECT id FROM identity_requests WHERE profile_id = ? AND status IN (\'uploaded\',\'verified\') ORDER BY id DESC LIMIT 1', [$profileId]);
+    // Only a request that is still open ('uploaded') counts: a request that was verified earlier belongs to the OLD address data.
+    $req = db_one('SELECT id FROM identity_requests WHERE profile_id = ? AND status = \'uploaded\' ORDER BY id DESC LIMIT 1', [$profileId]);
     return $req !== null && count(identity_files((int) $req['id'])) > 0;
+}
+
+/** Fingerprint of the ID images of the profile's open or verified request (file ids + hashes); '' if none. Bound into the review. */
+function identity_fingerprint(int $profileId): string
+{
+    foreach (db_all('SELECT id FROM identity_requests WHERE profile_id = ? AND status IN (\'uploaded\',\'verified\') ORDER BY id DESC', [$profileId]) as $req) {
+        $parts = [];
+        foreach (identity_files((int) $req['id']) as $f) {
+            $parts[] = $f['id'] . ':' . $f['enc_sha256'];
+        }
+        if ($parts !== []) {
+            return hash('sha256', implode('|', $parts));      // the newest request that actually has images
+        }
+    }
+    return '';
+}
+
+/** Delete every ID file of every identity request of a profile (inbox + archive), whoever uploaded it. @return int files deleted @throws RuntimeException */
+function vault_delete_profile_files(int $profileId): int
+{
+    $n = 0;
+    foreach (db_all('SELECT f.id FROM identity_files f JOIN identity_requests r ON r.id = f.request_id WHERE r.profile_id = ? AND f.deleted_at IS NULL', [$profileId]) as $f) {
+        vault_delete_file((int) $f['id']);
+        $n++;
+    }
+    return $n;
+}
+
+/**
+ * Janitor: ID images that were uploaded but never reviewed (or whose submission was rejected and abandoned) must not stay on the
+ * web server. Deletes the inbox files of open requests older than $days that are not part of a submission under review.
+ *
+ * @return int number of files removed
+ */
+function identity_inbox_gc(int $days = 14): int
+{
+    $n = 0;
+    $rows = db_all(
+        'SELECT r.id FROM identity_requests r WHERE r.status = \'uploaded\' AND r.updated_at < ?
+           AND NOT EXISTS (SELECT 1 FROM revisions v WHERE v.profile_id = r.profile_id AND v.state = \'submitted\')',
+        [now() - $days * 86400]
+    );
+    foreach ($rows as $r) {
+        foreach (identity_files((int) $r['id']) as $f) {
+            try {
+                vault_delete_file((int) $f['id']);
+                $n++;
+            } catch (Throwable $e) {
+                error_log('identity_inbox_gc: ' . $e->getMessage());
+            }
+        }
+        db_exec('UPDATE identity_requests SET status = \'erased\', updated_at = ? WHERE id = ? AND status = \'uploaded\'', [now(), (int) $r['id']]);
+    }
+    return $n;
 }

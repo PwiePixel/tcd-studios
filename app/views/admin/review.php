@@ -115,6 +115,7 @@ $privLabels = [
   <form class="pf-form pf-wide-form" method="post" action="<?= h($self) ?>">
     <?= csrf_field() ?>
     <input type="hidden" name="fp" value="<?= h(revision_fingerprint($rev)) ?>">
+    <input type="hidden" name="fp_id" value="<?= h(identity_fingerprint((int) $profile['id'])) ?>">
     <div class="pf-check">
       <input type="checkbox" id="verified" name="verified" value="1">
       <label for="verified"><?= h(__('I verified the identity and address')) ?></label>

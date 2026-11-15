@@ -106,6 +106,11 @@ openssl pkey -in id-vault-private-key.pem -pubout -out id-vault-public-key.pem</
         <input type="checkbox" id="confirm_replace" name="confirm_replace" value="1">
         <label for="confirm_replace"><?= h(__('I understand: files encrypted for the old key need the OLD private key. I still have it and will keep it.')) ?></label>
       </div>
+      <div class="pf-field">
+        <label for="admin_password"><?= h(__('Your current password')) ?></label>
+        <input type="password" id="admin_password" name="admin_password" autocomplete="current-password">
+        <div class="pf-help"><?= h(__('Required to replace the key: a replaced key redirects all new ID uploads.')) ?></div>
+      </div>
     </div>
 <?php endif; ?>
     <div class="pf-actions"><button class="pf-btn pf-btn--primary" type="submit" data-vault-save><?= h($status['key_set'] ? __('Replace public key') : __('Save public key')) ?></button></div>

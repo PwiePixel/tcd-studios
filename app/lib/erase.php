@@ -119,8 +119,13 @@ function account_erase(int $userId, string $initiator): array
             imprint_unpublish((int) $p['id']);
             $counts['profiles']++;
         }
-        // 2. identity documents: inbox + archive (idempotent; a failing storage aborts before anything else is deleted)
-        $files = db_all('SELECT f.id FROM identity_files f JOIN identity_requests r ON r.id = f.request_id WHERE r.user_id = ? AND f.deleted_at IS NULL', [$userId]);
+        // 2. identity documents: inbox + archive, found by uploader AND by profile ownership (idempotent; a failing or unavailable
+        //    storage aborts before anything else is deleted)
+        $files = db_all(
+            'SELECT DISTINCT f.id FROM identity_files f JOIN identity_requests r ON r.id = f.request_id
+              WHERE f.deleted_at IS NULL AND (r.user_id = ? OR r.profile_id IN (SELECT id FROM profiles WHERE owner_id = ?))',
+            [$userId, $userId]
+        );
         foreach ($files as $f) {
             vault_delete_file((int) $f['id']);
             $counts['identity_files']++;
@@ -131,20 +136,17 @@ function account_erase(int $userId, string $initiator): array
     }
 
     $notifyRef = $open !== null ? (int) $open['id'] : 0;
-    db_transaction(static function () use ($userId, &$counts, $notifyRef, $initiator) {
+    db_transaction(static function () use ($userId, &$counts, $notifyRef, $initiator, $email) {
         $counts['revisions'] = (int) (db_one('SELECT COUNT(*) AS n FROM revisions WHERE profile_id IN (SELECT id FROM profiles WHERE owner_id = ?)', [$userId])['n'] ?? 0);
-        $counts['requests'] = db_exec('DELETE FROM service_requests WHERE user_id = ?', [$userId]);
+        $counts['requests'] = db_exec('DELETE FROM service_requests WHERE user_id = ? OR lower(email) = lower(?)', [$userId, $email]);
         // Pseudonymise the audit log: no name/e-mail, no IP address and no details (page names) for rows about this person.
-        $profileIds = array_map(static function ($r) { return (string) $r['id']; }, db_all('SELECT id FROM profiles WHERE owner_id = ?', [$userId]));
-        $revisionIds = array_map(static function ($r) { return (string) $r['id']; }, db_all('SELECT id FROM revisions WHERE profile_id IN (SELECT id FROM profiles WHERE owner_id = ?)', [$userId]));
-        $fileIds = array_map(static function ($r) { return (string) $r['id']; }, db_all('SELECT f.id FROM identity_files f JOIN identity_requests r ON r.id = f.request_id WHERE r.user_id = ?', [$userId]));
+        foreach (db_all('SELECT id, slug FROM profiles WHERE owner_id = ?', [$userId]) as $pr) {
+            audit_scrub_profile((int) $pr['id'], (string) $pr['slug'], $userId);
+        }
+        audit_scrub_profile(0, '', $userId);
         db_exec('UPDATE audit_log SET actor_label = ?, ip = \'\', meta_json = \'{}\' WHERE actor_id = ?', ['erased-user#' . $userId, $userId]);
         db_exec('UPDATE audit_log SET target_id = NULL, meta_json = \'{}\' WHERE target_type = \'user\' AND target_id = ?', [(string) $userId]);
-        foreach (['profile' => $profileIds, 'revision' => $revisionIds, 'identity_file' => $fileIds] as $type => $ids) {
-            foreach ($ids as $tid) {
-                db_exec('UPDATE audit_log SET target_id = NULL, meta_json = \'{}\' WHERE target_type = ? AND target_id = ?', [$type, $tid]);
-            }
-        }
+
         db_exec('DELETE FROM profiles WHERE owner_id = ?', [$userId]);            // revisions + identity rows cascade
         db_exec('DELETE FROM identity_requests WHERE user_id = ?', [$userId]);
         if ($notifyRef > 0) {
@@ -159,6 +161,11 @@ function account_erase(int $userId, string $initiator): array
             [now(), null, 'system', 'account.erased', 'erased-user', (string) $userId, json_str(['initiator' => $initiator] + $counts), '']);
     });
 
+    try {
+        imprint_try_sitemap();                   // the erased pages must disappear from the public sitemap as well
+    } catch (Throwable $e) {
+        error_log('account_erase: sitemap refresh failed: ' . $e->getMessage());
+    }
     // Last mail to the address that is now being forgotten (nothing about it is stored any more).
     send_mail($email, __('Your data has been deleted'), sprintf(
         "Hello %s,\n\nas requested, Imprint Protection has ended and all your data (account, imprint profiles, address data and identity documents) has been deleted irrevocably. Your imprint page is offline.\n\nThank you for using the service.",

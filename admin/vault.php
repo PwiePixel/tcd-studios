@@ -32,6 +32,8 @@ if (is_post()) {
             redirect($self, ['ok' => __('This public key is already set. Nothing was changed.')]);
         } elseif ($existing !== '' && !post_bool('confirm_replace')) {
             $formError = __('A public key is already set. Please tick the confirmation box to replace it.');
+        } elseif ($existing !== '' && !password_verify(admin_post_raw('admin_password'), (string) $admin['password_hash'])) {
+            $formError = __('Please enter your current password to replace the public key.');
         } else {
             try {
                 vault_set_public_key($pem);
