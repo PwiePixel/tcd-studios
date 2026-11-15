@@ -15,7 +15,7 @@ defined('TCD_APP') || exit;
 /** Paths listed in sitemap.xml besides the live imprint pages. @return string[] */
 function site_static_paths(): array
 {
-    return ['/', '/newcomer/', '/tcd-programmer/', '/privacy/', '/legal-notice/', '/imprint-protection/', '/services/', '/shops/'];
+    return ['/', '/newcomer/', '/tcd-programmer/', '/privacy/', '/legal-notice/', '/imprint-protection/', '/services/', '/shops/', '/agb/', '/terms/'];
 }
 
 /**

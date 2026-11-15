@@ -9,7 +9,7 @@ defined('TCD_APP') || exit;
 
         <div class="ed-element ed-text custom-theme site-page">
           <p class="site-lead">
-            Services for creators, streamers and shop operators, from one partner.
+            Imprint Protection for all creators, and shops on request.
           </p>
 
 <?php if ($unavailable) : ?>

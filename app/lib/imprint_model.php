@@ -8,10 +8,21 @@ defined('TCD_APP') || exit;
  * Public data is published in the imprint; private data (identity/address) is never published.
  */
 
-/** @return array<string,string> kind => label */
+/**
+ * All kinds a profile can have (labels for display/validation). Imprint Protection is offered to creators only;
+ * 'shop' and 'other' exist for profiles that the team sets up on request (see imprint_creator_kinds()).
+ *
+ * @return array<string,string> kind => label
+ */
 function imprint_kinds(): array
 {
     return ['creator' => 'Content creator', 'streamer' => 'Streamer', 'shop' => 'Online shop', 'other' => 'Other'];
+}
+
+/** Kinds customers can choose themselves in the portal: creators only. @return array<string,string> */
+function imprint_creator_kinds(): array
+{
+    return ['creator' => 'Content creator', 'streamer' => 'Streamer'];
 }
 
 /** Default business-purpose text for a kind (the customer may edit it). */

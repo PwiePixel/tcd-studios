@@ -23,4 +23,6 @@ render_view('portal/dashboard', [
     'canCreate' => $count < $max,
     'maxProfiles' => $max,
     'requests' => $requests,
+    'termsAccepted' => portal_terms_accepted($user),
+    'termsInfo' => portal_terms_info($user),
 ]);

@@ -250,6 +250,21 @@ CREATE INDEX idx_tokens_user ON tokens(user_id, type);
             }
         },
         4 => 'ALTER TABLE users ADD COLUMN session_epoch INTEGER NOT NULL DEFAULT 0',
+        5 => function (PDO $pdo): void {
+            // Terms and Conditions (AGB) acceptance is recorded per customer (time + version).
+            $pdo->exec('ALTER TABLE users ADD COLUMN terms_accepted_at INTEGER');
+            $pdo->exec('ALTER TABLE users ADD COLUMN terms_version TEXT');
+            // Product rules: Imprint Protection is for creators (everyone); shops only on request; shop payments (future) via Stripe.
+            $upd = $pdo->prepare('UPDATE services SET name = ?, summary = ?, details = ?, availability = ?, requestable = ? WHERE slug = ?');
+            $upd->execute(['Imprint Protection for Creators',
+                'A legally sound imprint for creators and streamers on tcd-studio.de/legal/<name>/ with the management address of TCD-Studio/Agency instead of your private address. Available to all creators.',
+                'You decide which links and contact details appear in your imprint. Every change is reviewed and approved by our team before it goes live. Our Terms and Conditions (AGB) apply.',
+                'active', 1, 'imprint-protection']);
+            $upd->execute(['Shops (on request)',
+                'Imprint protection for online shops and, in future, payment processing via Stripe. Available on request and in limited numbers.',
+                'Imprint protection for shops is not part of the standard offer for creators; it is agreed individually. Planned: your shop payments are processed through the Stripe API; we retain an agreed share of the revenue, take care of the tax settlement and pay out according to tax law. In the launch phase this is available on request and in limited numbers only.',
+                'on_request', 1, 'shops']);
+        },
     ];
 }
 

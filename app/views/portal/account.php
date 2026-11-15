@@ -1,7 +1,7 @@
 <?php
 /**
  * @var array<string,mixed> $user @var string $nameValue @var array<string,string> $errors
- * @var array<int,array<string,mixed>> $requests @var bool $deletionOpen
+ * @var array<int,array<string,mixed>> $requests @var bool $deletionOpen @var array{version:?string,at:?int,current:bool} $termsInfo
  */
 defined('TCD_APP') || exit;
 ?>
@@ -46,6 +46,25 @@ defined('TCD_APP') || exit;
       <div class="pf-actions"><button class="pf-btn" type="submit"><?= h(__('Change password')) ?></button></div>
     </form>
   </div>
+</div>
+
+<div class="pf-card" id="terms">
+  <h2><?= h(__('Terms and Conditions')) ?></h2>
+<?php if ($termsInfo['version'] === null): ?>
+  <p class="pf-muted"><?= h(__('You have not accepted our Terms and Conditions yet.')) ?></p>
+<?php else: ?>
+  <dl class="pf-kv">
+    <dt><?= h(__('Accepted version')) ?></dt><dd><?= h($termsInfo['version']) ?><?= $termsInfo['current'] ? '' : ' <span class="pf-badge pf-badge--pending">' . h(__('outdated')) . '</span>' ?></dd>
+    <dt><?= h(__('Accepted on')) ?></dt><dd><?= h(fmt_time($termsInfo['at'])) ?></dd>
+  </dl>
+<?php endif; ?>
+  <p>
+<?php if (!$termsInfo['current']): ?>
+    <a class="pf-btn pf-btn--primary" href="/portal/terms.php"><?= h(__('Review and accept the current version')) ?></a>
+<?php endif; ?>
+    <a href="/agb/" target="_blank" rel="noopener"><?= h(__('Terms and Conditions (AGB)')) ?></a> ·
+    <a href="/terms/" target="_blank" rel="noopener"><?= h(__('English convenience translation')) ?></a>
+  </p>
 </div>
 
 <div class="pf-card">

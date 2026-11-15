@@ -13,7 +13,7 @@ defined('TCD_APP') || exit;
 <?php else: ?>
   <div class="pf-card pf-card--accent">
     <h1><?= h(__('Create your account')) ?></h1>
-    <p class="pf-muted"><?= h(__('With a free account you can set up your protected imprint and follow its status.')) ?></p>
+    <p class="pf-muted"><?= h(__('With a free account, content creators and streamers can set up their protected imprint and follow its status.')) ?></p>
     <?php if (!empty($errors['form'])): ?>
       <div class="pf-flash pf-flash--error" role="alert"><?= h($errors['form']) ?></div>
     <?php endif; ?>
@@ -42,10 +42,17 @@ defined('TCD_APP') || exit;
         <input type="text" id="f-website-url" name="website_url" value="" tabindex="-1" autocomplete="off">
       </div>
       <div class="pf-check">
-        <input type="checkbox" id="f-privacy" name="privacy" value="1" required<?= portal_invalid($errors, 'privacy') ?>>
+        <input type="checkbox" id="f-privacy" name="privacy" value="1"<?= $values['privacy'] !== '' ? ' checked' : '' ?> required<?= portal_invalid($errors, 'privacy') ?>>
         <label for="f-privacy"><?= h(__('I have read the')) ?> <a href="/privacy/" target="_blank" rel="noopener"><?= h(__('privacy policy')) ?></a>.</label>
       </div>
       <?= portal_err($errors, 'privacy') ?>
+      <div class="pf-check">
+        <input type="checkbox" id="f-accept_terms" name="accept_terms" value="1"<?= $values['accept_terms'] !== '' ? ' checked' : '' ?> required<?= portal_invalid($errors, 'accept_terms') ?>>
+        <label for="f-accept_terms"><?= h(__('I am a content creator and I accept the')) ?>
+          <a href="/agb/" target="_blank" rel="noopener"><?= h(__('Terms and Conditions (AGB)')) ?></a>
+          (<a href="/terms/" target="_blank" rel="noopener"><?= h(__('English convenience translation')) ?></a>).</label>
+      </div>
+      <?= portal_err($errors, 'accept_terms') ?>
       <div class="pf-actions">
         <button class="pf-btn pf-btn--primary" type="submit"><?= h(__('Create account')) ?></button>
       </div>

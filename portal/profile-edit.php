@@ -35,6 +35,13 @@ $form = [
     'show_contact_email' => !empty($stored['show_contact_email']),
     'contact_email'      => (string) $stored['contact_email'],
 ];
+// Customers choose creator kinds only. A draft that already has another kind (set up by our team, e.g. "shop") keeps
+// showing exactly that value, so editing and validation keep working; no other non-creator kind can be chosen.
+$kinds = imprint_creator_kinds();
+$storedKind = (string) $stored['kind'];
+if (!isset($kinds[$storedKind]) && isset(imprint_kinds()[$storedKind])) {
+    $kinds[$storedKind] = imprint_kinds()[$storedKind];
+}
 $formPrivate = [];
 foreach (array_keys(imprint_private_defaults()) as $field) {
     $formPrivate[$field] = (string) $storedPrivate[$field];
@@ -115,11 +122,19 @@ if (is_post()) {
     [$cleanPublic, $publicErrors] = imprint_clean_public($form + ['links' => $links]);
     [$cleanPrivate, $privateErrors] = imprint_clean_private($formPrivate, false);
     $errors = $errors + $publicErrors + $privateErrors;
+    if (!isset($errors['kind']) && !isset($kinds[$form['kind']])) {
+        $errors['kind'] = __('Imprint Protection is for content creators and streamers. Please choose one of these types. Imprint protection for shops is available on request.');
+    }
 
     if ($errors === []) {
         revision_save_draft($rid, $cleanPublic, $cleanPrivate);
         $links = $cleanPublic['links'];
         if ($action === 'save_submit') {
+            if (!portal_terms_accepted($user)) {
+                // The draft is saved, but submitting for review needs the current Terms and Conditions.
+                audit('revision.save', 'revision', $rid, ['profile_id' => $pid, 'action' => $action]);
+                portal_require_terms($user, __('Your draft was saved. Please accept our current Terms and Conditions (AGB) before you submit it for review.'));
+            }
             $fresh = revision_open($pid);
             $result = $fresh !== null ? portal_submit_draft($profile, $fresh, $user) : ['ok' => false, 'errors' => ['_form' => __('There is no draft to submit.')]];
             if ($result['ok']) {
@@ -154,7 +169,8 @@ render_view('portal/profile-edit', [
     'links'       => $links,
     'newLink'     => $newLink,
     'errors'      => $errors,
-    'kinds'       => imprint_kinds(),
+    'kinds'       => $kinds,
+    'termsAccepted' => portal_terms_accepted($user),
     'maxLinks'    => $maxLinks,
     'self'        => $self,
     'back'        => $back,

@@ -233,6 +233,7 @@ defined('TCD_APP') || exit;
               <ul>
                 <li style="text-align: center"><a href="/legal-notice/">Legal Notice</a></li>
                 <li style="text-align: center"><a href="/privacy/">Privacy Policy</a></li>
+                <li style="text-align: center"><a href="/agb/">Terms (AGB)</a></li>
               </ul>
             </div>
           </div>

@@ -10,6 +10,13 @@ von TCD-Studio/Agency statt der Privatadresse). Kunden registrieren sich, legen 
 Links/Angaben und reichen es ein. Ein **Admin muss jede Änderung freigeben** (Freigabe → statische Seite wird erzeugt).
 Weitere Dienste (Creator-Schutz allgemein: „coming soon“; **Shops: nur auf Anfrage**) hängen am Service-Katalog.
 
+## Produktregeln
+- **Imprint Protection (Standard) = nur für Creator**, für alle Creator verfügbar; Portal bietet nur `imprint_creator_kinds()`
+  (creator, streamer). Profile vom Typ shop/other legt nur das Team auf Anfrage an.
+- **Shops: nur auf Anfrage/begrenzt.** Künftige Shop-Zahlungen: **Stripe-API** (geplant, nicht implementiert).
+- **AGB** (`/agb/` DE verbindlich, `/terms/` EN): Zustimmung wird je Nutzer gespeichert (`users.terms_accepted_at`,
+  `users.terms_version`); `config('terms_version')` erhöhen → erneute Zustimmung vor neuem Profil/Einreichen.
+
 ## Verzeichnisse
 ```
 app/                  Code (per .htaccess gesperrt). bootstrap.php lädt app/lib/*.php

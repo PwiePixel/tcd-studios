@@ -23,6 +23,10 @@ return [
         'requests'     => 'contact@tcd-studio.de',    // service / shop requests
     ],
 
+    // Version of the Terms and Conditions (AGB). Bump it whenever /agb/ changes in a way customers must accept again;
+    // customers are asked to accept the current version before they create or submit an imprint.
+    'terms_version' => '2026-11-15',
+
     'password_min_length' => 10,
     'max_links'           => 12,
     'max_profiles_per_user' => 5,

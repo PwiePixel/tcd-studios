@@ -18,6 +18,7 @@ $status = (string) $customer['status'];
       <dt><?= h(__('E-mail confirmed')) ?></dt><dd><?= h(fmt_time($customer['email_verified_at'] !== null ? (int) $customer['email_verified_at'] : null)) ?></dd>
       <dt><?= h(__('Registered')) ?></dt><dd><?= h(fmt_time((int) $customer['created_at'])) ?></dd>
       <dt><?= h(__('Last sign-in')) ?></dt><dd><?= h(fmt_time($customer['last_login_at'] !== null ? (int) $customer['last_login_at'] : null)) ?></dd>
+      <dt><?= h(__('Terms and Conditions')) ?></dt><dd><?= terms_status_html($customer) /* escaped HTML from the helper */ ?></dd>
     </dl>
   </section>
   <section class="pf-card">

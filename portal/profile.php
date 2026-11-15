@@ -35,4 +35,5 @@ render_view('portal/profile', [
     'rejection'    => portal_last_rejection($revisions),
     'missing'      => $open !== null ? portal_private_missing($open['private']) : [],
     'readOnly'     => $profile['status'] === 'suspended',
+    'termsAccepted' => portal_terms_accepted($user),
 ]);

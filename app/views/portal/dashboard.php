@@ -2,11 +2,20 @@
 /**
  * @var array<string,mixed> $user
  * @var array<int,array<string,mixed>> $rows @var bool $canCreate @var int $maxProfiles @var array<int,array<string,mixed>> $requests
+ * @var bool $termsAccepted @var array{version:?string,at:?int,current:bool} $termsInfo
  */
 defined('TCD_APP') || exit;
 ?>
 <h1><?= h(__('Dashboard')) ?></h1>
 <p class="pf-muted"><?= h(sprintf(__('Welcome, %s!'), (string) $user['name'])) ?></p>
+
+<?php if (!$termsAccepted): ?>
+<div class="pf-notice" id="terms-notice">
+  <strong><?= h($termsInfo['version'] !== null ? __('We updated our Terms and Conditions.') : __('Please accept our Terms and Conditions.')) ?></strong>
+  <?= h(__('You can look at your imprints and edit drafts as usual. To create a new imprint profile or to submit an imprint for review, you need to accept the current Terms and Conditions (AGB).')) ?>
+  <div class="pf-actions pf-actions--tight"><a class="pf-btn pf-btn--primary pf-btn--small" href="/portal/terms.php"><?= h(__('Review and accept the Terms and Conditions')) ?></a></div>
+</div>
+<?php endif; ?>
 
 <div class="pf-notice pf-notice--info">
   <strong><?= h(__('How Imprint Protection works')) ?></strong>

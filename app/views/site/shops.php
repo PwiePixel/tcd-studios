@@ -4,7 +4,8 @@ declare(strict_types=1);
 defined('TCD_APP') || exit;
 
 /**
- * @var array<string,string> $values @var array<string,string> $errors @var string $notice @var bool $sent
+ * @var array<string,string> $values @var string[] $interest @var array<string,string> $interests
+ * @var array<string,string> $errors @var string $notice @var bool $sent @var string[] $sentInterest
  * @var string $token @var array<string,string> $ranges @var string $contact
  */
 $field = static function (string $name) use ($errors): string {
@@ -14,16 +15,24 @@ $err = static function (string $name) use ($errors): string {
     return isset($errors[$name]) ? '<p class="site-error-text" id="err-' . h($name) . '">' . h(__($errors[$name])) . '</p>' : '';
 };
 ?>
-        <?= site_headline('Shops', 'h2') ?>
+        <?= site_headline('Shops – on request', 'h2') ?>
 
         <div class="ed-element ed-text custom-theme site-page">
 <?php if ($sent) : ?>
           <p class="site-lead">Thank you for your request!</p>
           <div class="site-notice site-notice--ok" role="status">
             <p>
-              We have received your request and will get back to you by e-mail. Because the shop partnership is
-              available on request and in limited numbers during the launch phase, it can take a little while.
+              We have received your request and will get back to you by e-mail. Because shops are available on
+              request and in limited numbers during the launch phase, it can take a little while.
             </p>
+<?php if ($sentInterest) : ?>
+            <p>You told us you are interested in:</p>
+            <ul class="site-list">
+<?php foreach ($sentInterest as $key) : ?>
+              <li><?= h(__($interests[$key])) ?></li>
+<?php endforeach; ?>
+            </ul>
+<?php endif; ?>
           </div>
           <div class="site-actions">
             <a class="button button-large" href="/">Back to start</a>
@@ -31,32 +40,74 @@ $err = static function (string $name) use ($errors): string {
           </div>
 <?php else : ?>
           <p class="site-lead">
-            Connect your shop to the TCD payment system and let us take care of payments, tax settlement and payouts.
+            Imprint protection for shops is available on request only, and payment processing for shops is planned
+            via Stripe. Both are offered in limited numbers during the launch phase.
           </p>
 
           <div class="site-notice">
             <p>
-              <strong>Launch phase:</strong> the shop partnership is available on request and in limited numbers only.
-              Send us a request below and we will get in touch.
+              <strong>Launch phase:</strong> shops are not part of our standard offer. Everything on this page is
+              available on request and in limited numbers only. Send us a request below and we will get in touch.
             </p>
           </div>
 
           <div class="site-section">
-            <?= site_headline('How it works', 'h3') ?>
+            <?= site_headline('Imprint protection for shops', 'h3') ?>
+            <div class="site-intro">
+              <p>
+                Imprint Protection is our service for <a href="/imprint-protection/">creators</a>. For online shops it
+                is not part of the standard offer: we provide it on request only and in limited numbers.
+              </p>
+            </div>
             <div class="site-grid">
               <div class="site-card">
-                <h4>Connect your shop</h4>
-                <p>Your shop is connected to the TCD payment system, so your customers can pay you through it.</p>
+                <h4>Request instead of sign-up</h4>
+                <p>Send us a request below. We look at every shop individually and get back to you by e-mail.</p>
               </div>
               <div class="site-card">
+                <h4>Limited numbers</h4>
+                <p>During the launch phase we can only take on a small number of shops.</p>
+              </div>
+              <div class="site-card">
+                <h4>Agreed individually</h4>
+                <p>
+                  The conditions are agreed with you individually. They are not covered by the standard
+                  <a href="/agb/">Terms and Conditions (AGB)</a> of Imprint Protection for creators.
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <div class="site-section">
+            <?= site_headline('Shop payments – planned via Stripe', 'h3') ?>
+            <div class="site-intro">
+              <p>
+                In future we plan to process shop payments through the Stripe API. This is <strong>planned and not yet
+                available</strong>. Like imprint protection for shops, it will only be offered on request and in
+                limited numbers.
+              </p>
+            </div>
+            <div class="site-grid">
+              <div class="site-card">
+                <span class="site-badge site-badge--coming_soon">Planned</span>
+                <h4>Payments via Stripe</h4>
+                <p>The payments of your shop are planned to be processed through Stripe, so your customers can pay you through it.</p>
+              </div>
+              <div class="site-card">
+                <span class="site-badge site-badge--coming_soon">Planned</span>
                 <h4>Agreed revenue share</h4>
-                <p>We retain an agreed share of the revenue. The terms are agreed with you individually before you start.</p>
+                <p>TCD-Studio/Agency retains an agreed share of the revenue. The terms are agreed with you individually before you start.</p>
               </div>
               <div class="site-card">
+                <span class="site-badge site-badge--coming_soon">Planned</span>
                 <h4>Tax settlement and payout</h4>
                 <p>We take care of the tax settlement and pay out to you according to tax law.</p>
               </div>
             </div>
+            <p class="site-center">
+              Stripe's own terms apply to the payment processing. There is no launch date yet; conditions are agreed
+              with you individually.
+            </p>
           </div>
 
           <div class="site-section">
@@ -70,6 +121,18 @@ $err = static function (string $name) use ($errors): string {
                 <label for="f-website">Leave this field empty</label>
                 <input type="text" id="f-website" name="website" value="" tabindex="-1" autocomplete="off">
               </div>
+
+              <fieldset class="site-field site-fieldset<?= $field('interest') ?>">
+                <legend>I am interested in</legend>
+<?php foreach ($interests as $key => $label) : ?>
+                <label class="site-check" for="f-interest-<?= h($key) ?>">
+                  <input type="checkbox" id="f-interest-<?= h($key) ?>" name="interest[]" value="<?= h($key) ?>"<?= in_array($key, $interest, true) ? ' checked' : '' ?>>
+                  <span><?= h(__($label)) ?></span>
+                </label>
+<?php endforeach; ?>
+                <p class="site-help">Please choose at least one option.</p>
+                <?= $err('interest') ?>
+              </fieldset>
 
               <div class="site-field<?= $field('shop_name') ?>">
                 <label for="f-shop_name">Shop name</label>

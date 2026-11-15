@@ -9,6 +9,11 @@ defined('TCD_APP') || exit;
   <div class="pf-notice"><?= h(sprintf(__('You have reached the maximum of %d imprint profiles. Please contact us if you need more.'), $maxProfiles)) ?></div>
   <p><a class="pf-btn" href="/portal/dashboard.php"><?= h(__('Back to the dashboard')) ?></a></p>
 <?php else: ?>
+  <div class="pf-notice pf-notice--info">
+    <?= h(__('Imprint Protection is for content creators and streamers.')) ?>
+    <?= h(__('Do you run an online shop? Imprint protection for shops is available on request only.')) ?>
+    <a href="/shops/"><?= h(__('Request it for your shop')) ?></a>.
+  </div>
   <p class="pf-muted"><?= h(__('First choose how your imprint is called and where it will be published. In the next step you add your details, links and private information.')) ?></p>
   <form class="pf-form" method="post" action="/portal/profile-new.php">
     <?= csrf_field() ?>
@@ -21,7 +26,7 @@ defined('TCD_APP') || exit;
     <div class="pf-field">
       <label for="f-kind"><?= h(__('Type')) ?></label>
       <select id="f-kind" name="kind"<?= portal_invalid($errors, 'kind') ?>>
-        <?php foreach (imprint_kinds() as $key => $label): ?>
+        <?php foreach (imprint_creator_kinds() as $key => $label): ?>
           <option value="<?= h($key) ?>"<?= $values['kind'] === $key ? ' selected' : '' ?>><?= h(__($label)) ?></option>
         <?php endforeach; ?>
       </select>

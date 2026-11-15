@@ -53,4 +53,5 @@ render_view('portal/account', [
     'errors'       => $errors,
     'requests'     => $requests,
     'deletionOpen' => $deletionOpen,
+    'termsInfo'    => portal_terms_info($user),
 ]);

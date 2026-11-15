@@ -15,8 +15,8 @@ const SITE_CSS = ['/css/site.css'];
 function site_page_imprint_protection(): void
 {
     site_render([
-        'title'       => 'Imprint Protection - TCD-Studio/Agency',
-        'description' => 'A legally sound imprint for creators on tcd-studio.de, with the management address of TCD-Studio/Agency instead of your private address.',
+        'title'       => 'Imprint Protection for Creators - TCD-Studio/Agency',
+        'description' => 'Imprint Protection for all creators: a legally sound imprint on tcd-studio.de with the management address of TCD-Studio/Agency instead of your private address. Our Terms (AGB) apply. Shops on request only.',
         'canonical'   => '/imprint-protection/',
         'css'         => SITE_CSS,
         'content'     => render_partial('site/imprint-protection', ['imprintMail' => (string) config('mail.imprint')]),
@@ -73,7 +73,7 @@ function site_page_services(): void
     }
     site_render([
         'title'       => 'Services - TCD-Studio/Agency',
-        'description' => 'Services of TCD-Studio/Agency for creators, streamers and shop operators.',
+        'description' => 'Services of TCD-Studio/Agency: Imprint Protection for all creators, shops on request.',
         'canonical'   => '/services/',
         'css'         => SITE_CSS,
         'content'     => render_partial('site/services', ['cards' => $cards, 'unavailable' => $services === null]),
@@ -89,6 +89,13 @@ function site_page_services(): void
  */
 function site_coming_soon_topics(): array
 {
+    $payments = [
+        'Shop payments via Stripe – planned',
+        'In future we plan to process shop payments through the Stripe API. TCD-Studio/Agency would retain an agreed share of the revenue, '
+        . 'take care of the tax settlement and pay out according to tax law. This is planned and not yet available; it will only be offered on request '
+        . 'and in limited numbers, and Stripe\'s own terms apply to the payment processing.',
+        ['/shops/', 'Shops – on request'],
+    ];
     return [
         'instagram' => [
             'Our Instagram profile is coming soon',
@@ -96,20 +103,18 @@ function site_coming_soon_topics(): array
             ['/#ed-713620122', 'Contact us'],
         ],
         'shops' => [
-            'Shop partnership – on request',
-            'Connecting your shop to our payment system is available on request and in limited numbers during the launch phase. Tell us about your shop and we will get back to you.',
+            'Shops – on request',
+            'Imprint protection for shops is available on request and in limited numbers during the launch phase, and it is agreed individually. '
+            . 'Shop payments via Stripe are planned for the future. Tell us about your shop and we will get back to you.',
             ['/shops/', 'Learn more and send a request'],
         ],
         'creator-protection' => [
             'Creator Protection – coming soon',
-            'We are building further protection services for creators and streamers. Imprint Protection is already available; everything else follows step by step.',
+            'We are building further protection services for creators and streamers. Imprint Protection for creators is already available; everything else follows step by step.',
             ['/imprint-protection/', 'Discover Imprint Protection'],
         ],
-        'payments' => [
-            'Payments – coming soon',
-            'Our payment services are in preparation. In the launch phase they are only offered to selected shop partners on request.',
-            ['/shops/', 'Shop partnership'],
-        ],
+        'payments' => $payments,
+        'stripe-payments' => $payments,
         'generic' => [
             'This page is coming soon',
             'We are still working on this page. Please check back later or get in touch if you have any questions.',
@@ -170,10 +175,52 @@ function site_shop_revenue_ranges(): array
     ];
 }
 
+/** @return array<string,string> key => label of what a shop request is about (allow-list of interest[]) */
+function site_shop_interests(): array
+{
+    return [
+        'imprint_protection' => 'Imprint protection for my shop (on request, limited)',
+        'payments'           => 'Shop payments via Stripe (planned)',
+    ];
+}
+
+/**
+ * interest[] from the POST data as a plain list of short strings (nothing is trusted yet: site_shop_validate()
+ * checks every entry against the allow-list). Anything that is not a string becomes '' and fails the check.
+ *
+ * @return string[]
+ */
+function site_shop_interest_post(): array
+{
+    $raw = isset($_POST['interest']) && is_array($_POST['interest']) ? array_slice($_POST['interest'], 0, 10) : [];
+    $out = [];
+    foreach ($raw as $v) {
+        $out[] = is_string($v) ? mb_substr(trim($v), 0, 40, 'UTF-8') : '';
+    }
+    return $out;
+}
+
+/**
+ * Allow-listed interest keys of a (validated) list, unique and in the canonical order of site_shop_interests().
+ *
+ * @param array<int,mixed> $list
+ * @return string[]
+ */
+function site_shop_interest_keys(array $list): array
+{
+    $keys = [];
+    foreach (array_keys(site_shop_interests()) as $key) {
+        if (in_array($key, $list, true)) {
+            $keys[] = $key;
+        }
+    }
+    return $keys;
+}
+
 /**
  * Validate the shop request form.
  *
- * @param array<string,string> $in trimmed input
+ * @param array<string,mixed> $in trimmed input ('interest' is a list of strings, everything else a string)
  * @return array<string,string> errors by field (empty = valid)
  */
 function site_shop_validate(array $in): array
@@ -197,6 +244,17 @@ function site_shop_validate(array $in): array
     if (!isset(site_shop_revenue_ranges()[$in['revenue']])) {
         $e['revenue'] = 'Please choose an expected revenue range.';
     }
+    $interest = isset($in['interest']) && is_array($in['interest']) ? $in['interest'] : [];
+    $allowed = site_shop_interests();
+    $interestOk = $interest !== [];
+    foreach ($interest as $v) {
+        if (!is_string($v) || !isset($allowed[$v])) {
+            $interestOk = false;
+        }
+    }
+    if (!$interestOk) {
+        $e['interest'] = 'Please choose at least one option.';
+    }
     if (!v_len($in['message'], 0, 2000)) {
         $e['message'] = 'Your message is too long (maximum 2,000 characters).';
     }
@@ -207,16 +265,23 @@ function site_page_shops(): void
 {
     $purpose = 'shops-request';
     $values = ['shop_name' => '', 'shop_url' => '', 'country' => '', 'contact_name' => '', 'email' => '', 'revenue' => '', 'message' => ''];
+    $interest = [];
     $errors = [];
     $notice = '';
     $status = 200;
     $sent = !is_post() && get_str('sent', 2) === '1';
+    // After a successful request the confirmation names what the request was about (allow-listed keys only).
+    $sentInterest = [];
+    if ($sent) {
+        $sentInterest = site_shop_interest_keys(explode(',', get_str('interest', 100)));
+    }
 
     if (is_post()) {
         foreach (array_keys($values) as $k) {
             $values[$k] = post_str($k, $k === 'message' ? 2100 : 300);
         }
         $values['email'] = mb_strtolower($values['email'], 'UTF-8');
+        $interest = site_shop_interest_post();
 
         if (!site_same_origin()) {
             $notice = 'The request could not be verified. Please open this page again and send the form from here.';
@@ -234,14 +299,15 @@ function site_page_shops(): void
             } elseif ($tokenState === 'expired') {
                 $notice = 'The form has expired. Please check your entries and send it again.';
             } else {
-                $errors = site_shop_validate($values);
+                $errors = site_shop_validate($values + ['interest' => $interest]);
                 if (!$errors) {
                     if (!rate_limit_hit('shops:ip:' . client_ip(), (array) config('rate.request_ip', [5, 3600]))) {
                         $notice = 'Too many requests from your network. Please try again later or write to us by e-mail.';
                         $status = 429;
                     } else {
-                        site_shop_store($values);
-                        redirect('/shops/?sent=1');
+                        $keys = site_shop_interest_keys($interest);
+                        site_shop_store($values, $keys);
+                        redirect('/shops/?sent=1&interest=' . implode(',', $keys));
                     }
                 } else {
                     $notice = 'Please check the marked fields.';
@@ -252,17 +318,20 @@ function site_page_shops(): void
     }
 
     $content = render_partial('site/shops', [
-        'values'   => $values,
-        'errors'   => $errors,
-        'notice'   => $notice,
-        'sent'     => $sent,
-        'token'    => site_form_token($purpose),
-        'ranges'   => site_shop_revenue_ranges(),
-        'contact'  => (string) config('mail.requests'),
+        'values'      => $values,
+        'interest'    => site_shop_interest_keys($interest),
+        'interests'   => site_shop_interests(),
+        'errors'      => $errors,
+        'notice'      => $notice,
+        'sent'        => $sent,
+        'sentInterest' => $sentInterest,
+        'token'       => site_form_token($purpose),
+        'ranges'      => site_shop_revenue_ranges(),
+        'contact'     => (string) config('mail.requests'),
     ]);
     site_render([
-        'title'       => 'Shops - TCD-Studio/Agency',
-        'description' => 'Connect your shop to the TCD payment system: payments, tax settlement and payouts from one partner. Available on request in the launch phase.',
+        'title'       => 'Shops on request - TCD-Studio/Agency',
+        'description' => 'Shops on request: imprint protection for shops is available on request and in limited numbers. Shop payments via Stripe are planned for the future.',
         'canonical'   => '/shops/',
         'robots'      => $sent ? 'noindex, follow' : '',
         'css'         => SITE_CSS,
@@ -274,18 +343,26 @@ function site_page_shops(): void
  * Store a validated shop request and notify the team.
  *
  * @param array<string,string> $v
+ * @param string[] $interest allow-listed keys of site_shop_interests() (at least one)
  */
-function site_shop_store(array $v): void
+function site_shop_store(array $v, array $interest): void
 {
     $ranges = site_shop_revenue_ranges();
+    $labels = site_shop_interests();
     $payload = [
         'shop_name' => $v['shop_name'], 'url' => $v['shop_url'], 'country' => $v['country'],
+        'interest' => array_values($interest),
         'revenue_range' => $ranges[$v['revenue']], 'message' => $v['message'],
     ];
     $id = request_create('shops', null, $v['contact_name'], $v['email'], $payload);
     audit('request.create', 'request', $id, ['service' => 'shops', 'source' => 'public form']);
 
-    $text = "New shop partnership request (#" . $id . ")\n\n"
+    $interestLines = '';
+    foreach ($interest as $key) {
+        $interestLines .= '  - ' . ($labels[$key] ?? $key) . "\n";
+    }
+    $text = "New shop request (#" . $id . ")\n\n"
+        . "Interested in:\n" . $interestLines . "\n"
         . 'Shop: ' . $v['shop_name'] . "\n"
         . 'URL: ' . $v['shop_url'] . "\n"
         . 'Country: ' . $v['country'] . "\n"

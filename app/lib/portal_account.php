@@ -99,6 +99,8 @@ function portal_export_data(array $user): array
             'email_verified_at' => portal_iso($user['email_verified_at'] !== null ? (int) $user['email_verified_at'] : null),
             'created_at'        => portal_iso((int) $user['created_at']),
             'last_login_at'     => portal_iso($user['last_login_at'] !== null ? (int) $user['last_login_at'] : null),
+            'terms_accepted_at' => portal_iso(isset($user['terms_accepted_at']) && $user['terms_accepted_at'] !== null ? (int) $user['terms_accepted_at'] : null),
+            'terms_version'     => isset($user['terms_version']) && $user['terms_version'] !== null ? (string) $user['terms_version'] : null,
         ],
         'imprint_profiles' => $profiles,
         'service_requests' => $requests,

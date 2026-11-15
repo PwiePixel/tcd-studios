@@ -38,6 +38,9 @@ $privLabels = [
       <dd><?php if ($owner): ?><a href="/admin/customer.php?id=<?= (int) $owner['id'] ?>"><?= h($owner['name']) ?></a><br><?= h($owner['email']) ?>
         <?= $owner['email_verified_at'] ? '<span class="pf-badge pf-badge--ok">' . h(__('e-mail verified')) . '</span>' : '<span class="pf-badge pf-badge--pending">' . h(__('e-mail not verified')) . '</span>' ?>
         <?php else: ?><span class="pf-muted"><?= h(__('no owner assigned')) ?></span><?php endif; ?></dd>
+<?php if ($owner): ?>
+      <dt><?= h(__('Terms and Conditions')) ?></dt><dd><?= terms_status_html($owner) /* escaped HTML from the helper */ ?></dd>
+<?php endif; ?>
       <dt><?= h(__('Submitted')) ?></dt><dd><?= h(fmt_time($rev['submitted_at'] !== null ? (int) $rev['submitted_at'] : null)) ?> (<?= h(admin_age($rev['submitted_at'] !== null ? (int) $rev['submitted_at'] : null)) ?>)</dd>
       <dt><?= h(__('Identity')) ?></dt><dd><?= !empty($profile['identity_verified']) ? '<span class="pf-badge pf-badge--ok">' . h(__('verified before')) . '</span>' : '<span class="pf-badge pf-badge--pending">' . h(__('not verified yet')) . '</span>' ?></dd>
     </dl>

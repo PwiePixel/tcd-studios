@@ -5,17 +5,27 @@ defined('TCD_APP') || exit;
 
 /** @var string $imprintMail */
 ?>
-        <?= site_headline('Imprint Protection', 'h2') ?>
+        <?= site_headline('Imprint Protection for Creators', 'h2') ?>
 
         <div class="ed-element ed-text custom-theme site-page">
           <p class="site-lead">
             A legally sound imprint for creators, published on tcd-studio.de, with the management address of
-            TCD-Studio/Agency instead of your private address.
+            TCD-Studio/Agency instead of your private address. Open to every creator.
           </p>
+
+          <div class="site-notice">
+            <p>
+              <strong>For creators only:</strong> Imprint Protection is offered to all creators (content creators,
+              streamers, video creators, artists and others who publish their own content) and only to creators.
+              Our <a href="/agb/">Terms and Conditions (AGB)</a> apply; an
+              <a href="/terms/">English translation</a> is available, and the German version governs.
+            </p>
+          </div>
 
           <div class="site-actions">
             <a class="button button-large" href="/portal/register.php">Create account</a>
             <a class="button button-large site-btn-ghost" href="/portal/login.php">Sign in</a>
+            <a class="button button-large site-btn-ghost" href="/agb/">Terms and Conditions (AGB)</a>
           </div>
 
           <div class="site-section">
@@ -65,7 +75,7 @@ defined('TCD_APP') || exit;
             <div class="site-grid">
               <div class="site-card">
                 <h4>Your links</h4>
-                <p>List the channels and websites that belong to your imprint, for example your stream, your social profiles or your shop.</p>
+                <p>List the channels and websites that belong to your imprint, for example your stream, your social profiles or your website.</p>
               </div>
               <div class="site-card">
                 <h4>Contact visibility</h4>
@@ -97,16 +107,23 @@ defined('TCD_APP') || exit;
             <div class="site-grid">
               <div class="site-card">
                 <h4>Creators</h4>
-                <p>Video creators, artists and everybody who publishes content on the internet.</p>
+                <p>Content creators and everybody who publishes their own content on the internet.</p>
               </div>
               <div class="site-card">
                 <h4>Streamers</h4>
                 <p>Streamers who want a proper imprint for their channel without publishing their home address.</p>
               </div>
               <div class="site-card">
-                <h4>Shop operators</h4>
-                <p>Later also for shops. Our <a href="/shops/">shop partnership</a> is available on request.</p>
+                <h4>Artists and video creators</h4>
+                <p>Artists, illustrators, video creators and other creative people who show their work online.</p>
               </div>
+            </div>
+            <div class="site-notice">
+              <p>
+                <strong>Online shops:</strong> imprint protection for shops is available on request only and in
+                limited numbers, and is agreed individually. It is not part of the standard offer for creators.
+                <a href="/shops/">Learn more about shops (on request)</a>
+              </p>
             </div>
           </div>
 
@@ -116,8 +133,24 @@ defined('TCD_APP') || exit;
               <details>
                 <summary>Is Imprint Protection available to me, and what does it cost?</summary>
                 <p>
-                  Availability and prices are available on request. Create an account or write to us at
-                  <a href="mailto:<?= h($imprintMail) ?>"><?= h($imprintMail) ?></a> and we will get back to you.
+                  It is available to all creators. The Terms and Conditions (AGB) and the offer shown at sign-up
+                  apply. If you have questions, write to us at
+                  <a href="mailto:<?= h($imprintMail) ?>"><?= h($imprintMail) ?></a>.
+                </p>
+              </details>
+              <details>
+                <summary>Which terms apply?</summary>
+                <p>
+                  Our <a href="/agb/">Terms and Conditions (AGB)</a> apply. They are written in German; an
+                  <a href="/terms/">English translation</a> is provided for convenience, and the German version
+                  governs.
+                </p>
+              </details>
+              <details>
+                <summary>Can I use it for my online shop?</summary>
+                <p>
+                  Not as a standard service. Imprint protection for shops is available on request only and in
+                  limited numbers, see <a href="/shops/">Shops (on request)</a>.
                 </p>
               </details>
               <details>
@@ -160,8 +193,9 @@ defined('TCD_APP') || exit;
           <div class="site-section">
             <div class="site-notice">
               <p>
-                <strong>Ready to start?</strong> Create your account and set up your imprint profile. You already have
-                an account? Sign in to continue.
+                <strong>Ready to start?</strong> Create your account and set up your imprint profile: Imprint
+                Protection is open to every creator, and our <a href="/agb/">Terms and Conditions (AGB)</a> apply.
+                You already have an account? Sign in to continue.
               </p>
             </div>
             <div class="site-actions">

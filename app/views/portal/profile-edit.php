@@ -3,7 +3,7 @@
  * @var array<string,mixed> $profile @var array<string,mixed> $revision
  * @var array<string,mixed> $form @var array<string,string> $private @var array<string,string> $privateLabels
  * @var array<int,array{label:string,url:string}> $links @var array<string,string> $newLink @var array<string,string> $errors
- * @var array<string,string> $kinds @var int $maxLinks @var string $self @var string $back
+ * @var array<string,string> $kinds @var int $maxLinks @var string $self @var string $back @var bool $termsAccepted
  */
 defined('TCD_APP') || exit;
 $e = $errors;
@@ -18,6 +18,10 @@ $e = $errors;
   <?= h(__('You are editing a draft. Saving does not publish anything: when you are ready, submit the draft for review. Our team checks every change before it goes live.')) ?>
   <br><?= h(__('Your page:')) ?> <code><?= h(imprint_public_url((string) $profile['slug'])) ?></code>
 </div>
+<?php if (!$termsAccepted): ?>
+<div class="pf-notice"><?= h(__('You can keep editing your draft. To submit it for review, please accept our current Terms and Conditions (AGB) first.')) ?>
+  <a href="/portal/terms.php"><?= h(__('Review and accept')) ?></a></div>
+<?php endif; ?>
 <?php if (!empty($e['_form'])): ?>
   <div class="pf-flash pf-flash--error" role="alert"><?= h($e['_form']) ?></div>
 <?php endif; ?>

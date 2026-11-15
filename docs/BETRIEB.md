@@ -1,6 +1,10 @@
 # Impressumsschutz-System – Betriebsanleitung
 
-tcd-studio.de bietet **Impressumsschutz für Creator/Streamer**: Jeder Kunde bekommt ein eigenes Impressum unter
+tcd-studio.de bietet **Impressumsschutz für alle Creator** (Streamer, Video-Creator, Künstler …) – und **nur für Creator**.
+Für **Shops** gibt es Impressumsschutz **nur auf Anfrage** und begrenzt; künftige **Shop-Zahlungen** sollen über die
+**Stripe-API** laufen (noch nicht gebaut). Für den normalen Impressumsschutz gelten die **AGB** (siehe unten).
+
+Jeder Kunde bekommt ein eigenes Impressum unter
 `https://tcd-studio.de/legal/<name>/`, in dem die **Management-Adresse von TCD-Studio/Agency** steht statt seiner
 Privatadresse. Die echten Daten des Kunden bleiben intern (nur der Kunde selbst und das Admin-Team sehen sie).
 
@@ -8,10 +12,11 @@ Privatadresse. Die echten Daten des Kunden bleiben intern (nur der Kunde selbst 
 
 | Bereich | URL | Wer |
 |---|---|---|
-| Kundenbereich | `/portal/` | Creator / Shop-Betreiber (Registrierung mit E-Mail-Bestätigung) |
+| Kundenbereich | `/portal/` | Creator (Registrierung mit E-Mail-Bestätigung und Zustimmung zu den AGB) |
 | Admin-Panel | `/admin/` | Team (eigene Admin-Konten, optional 2-Faktor per Authenticator-App) |
 | Impressen (öffentlich) | `/legal/<name>/` | jeder – statische Seiten, werden nach Freigabe erzeugt |
 | Dienste | `/services/`, `/imprint-protection/`, `/shops/` | öffentlich |
+| AGB | `/agb/` (Deutsch, **verbindlich**), `/terms/` (Englisch, nur zur Information) | öffentlich |
 | Coming Soon (wiederverwendbar) | `/coming-soon/?topic=<thema>` | öffentlich; Themen: instagram, shops, creator-protection, payments |
 
 ## Ablauf Impressumsschutz
@@ -29,12 +34,30 @@ Privatadresse. Die echten Daten des Kunden bleiben intern (nur der Kunde selbst 
 7. Admin kann jederzeit **sperren** (Seite verschwindet), **wieder aktivieren**, den Seitennamen ändern oder löschen.
    Der Kunde kann sein Impressum selbst **offline nehmen**.
 
-## Shops (nur auf Anfrage)
+## AGB (Allgemeine Geschäftsbedingungen)
 
-`/shops/` beschreibt das Konzept (Anbindung an unser Zahlungssystem, Einbehalt eines vereinbarten Anteils,
-Steuerabrechnung, Auszahlung nach Steuerrecht) und nimmt **Anfragen** entgegen. In der Anlaufphase ist das **nur auf
-Anfrage und begrenzt**. Anfragen landen im Admin-Panel unter „Requests“ und per Mail bei `contact@tcd-studio.de`.
-Es gibt **noch keine Zahlungsabwicklung** in dieser Software – das System verwaltet nur Anfragen.
+- Texte: `app/views/site/agb.php` (Deutsch, verbindlich) und `app/views/site/terms.php` (Englisch, Übersetzung).
+  Die Anbieterdaten (Name, Anschrift, Telefon, Postfächer) kommen aus den Einstellungen bzw. `app/config.php`.
+- **Zustimmung:** Bei der Registrierung ist das Häkchen „Ich bin Creator und akzeptiere die AGB“ Pflicht. Zeitpunkt und
+  **Version** werden gespeichert (Admin sieht sie bei der Freigabe und in der Kundenansicht).
+- **Neue Fassung:** Inhaltliche Änderung der AGB → `terms_version` in `app/config.php` erhöhen (z. B. `2027-03-01`). Bis
+  Kunden der neuen Fassung im Portal zustimmen, können sie keine neuen Profile anlegen und nichts mehr einreichen (die
+  bisher freigegebene Impressumsseite bleibt online).
+- **Vorab klären / Entscheidungen** (im Text so festgelegt, bitte bestätigen oder ändern lassen): Dienst **unentgeltlich,
+  solange keine Preisinformation angezeigt wird** (§ 6) · Mindestalter 18 (§ 3) · Kündigung durch uns mit 14 Tagen Frist
+  (§ 7) · Gerichtsstand Graz für Unternehmer (§ 11) · Rücktrittsrecht für Verbraucher inkl. Musterformular (§ 8) ·
+  Weitergabe von Identitätsdaten an Behörden/Gerichte (§ 5). **Die AGB sollten vor dem Livegang anwaltlich geprüft werden.**
+
+## Shops (nur auf Anfrage) und Stripe
+
+- Imprint Protection für **Shops** gehört nicht zum Standardangebot für Creator, sondern wird **auf Anfrage und begrenzt**
+  individuell vereinbart.
+- **Shop-Zahlungen sind für die Zukunft über die Stripe-API geplant** (Einbehalt eines vereinbarten Anteils,
+  Steuerabrechnung, Auszahlung nach Steuerrecht). Es gibt in dieser Software **noch keine Zahlungsabwicklung** und keine
+  Stripe-Anbindung; sie verwaltet nur **Anfragen** (`/shops/`, Admin → Requests, Mail an `contact@tcd-studio.de`).
+- Für eine spätere Umsetzung: Stripe-Schlüssel gehören nie ins Repository, sondern in `data/config.local.php`
+  (dort ist noch nichts vorgesehen oder ausgelesen). Ob ein Modell mit Einbehalt und Auszahlung (z. B. Stripe Connect)
+  zahlungsdiensterechtlich zulässig ist, muss vorher rechtlich/steuerlich geklärt werden.
 
 ## Erste Inbetriebnahme
 
@@ -65,4 +88,7 @@ greifen (Apache) – die Datenbankdatei hat einen zufälligen Namen. Regelmäßi
   erledigt ein Admin manuell.
 - **Shops/Zahlungen:** Fremdgeld einziehen, Steuerabrechnung erstellen und auszahlen kann erlaubnispflichtig sein
   (Zahlungsdiensterecht) und braucht einen Zahlungsdienstleister. Deshalb bewusst nur „auf Anfrage“.
-- **AGB/Preise** für den Impressumsschutz gibt es noch nicht; auf den Seiten steht bewusst „auf Anfrage“.
+- **Preise** für den Impressumsschutz sind noch nicht festgelegt (laut AGB bis dahin unentgeltlich). Sobald es Preise
+  gibt: Preisinformation im Portal/auf der Seite anzeigen und AGB § 6 prüfen.
+- **Streitbeilegung/ODR-Hinweis** in den Impressen: Die EU-Online-Streitbeilegungsplattform (ec.europa.eu/consumers/odr)
+  wurde nach meinem Kenntnisstand eingestellt – den Absatz bitte prüfen lassen.

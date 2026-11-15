@@ -75,6 +75,11 @@
 .site-field--error input,
 .site-field--error select,
 .site-field--error textarea { border-color: #c62828; }
+.site-fieldset { margin-left: 0; margin-right: 0; padding: 0; border: 0; min-width: 0; }
+.site-fieldset legend { display: block; width: 100%; padding: 0; margin-bottom: 0.4rem; font-size: 0.85rem; font-weight: 600; letter-spacing: 0.03em; text-transform: uppercase; }
+.site-field .site-check { display: flex; align-items: flex-start; gap: 0.6rem; margin-bottom: 0.4rem; font-size: 1rem; font-weight: 400; letter-spacing: 0; text-transform: none; cursor: pointer; }
+.site-check input[type="checkbox"] { flex: 0 0 auto; width: 1.15rem; height: 1.15rem; margin: 0.2rem 0 0; accent-color: #ff4747; }
+.site-fieldset.site-field--error legend { color: #c62828; }
 .site-help { margin: 0.25rem 0 0 !important; font-size: 0.85rem; color: #555; }
 .site-error-text { margin: 0.25rem 0 0 !important; font-size: 0.85rem; color: #c62828; font-weight: 600; }
 .site-row { display: grid; gap: 0 1rem; grid-template-columns: repeat(2, minmax(0, 1fr)); }

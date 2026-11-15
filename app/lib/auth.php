@@ -71,9 +71,11 @@ function auth_consume_token(string $plain, string $type): ?array
 /**
  * Register a customer. Always behaves the same for existing and new addresses (no account enumeration).
  *
+ * @param bool|null $termsAccepted true = the customer accepted the current Terms and Conditions (AGB) in the form:
+ *                                 time + version are stored on the account; null/false = nothing is recorded (legacy callers)
  * @return array{ok:bool,error:string}
  */
-function auth_register(string $email, string $name, string $password): array
+function auth_register(string $email, string $name, string $password, ?bool $termsAccepted = null): array
 {
     $email = mb_strtolower(trim($email), 'UTF-8');
     if (!rate_limit_hit('register:ip:' . client_ip(), config('rate.register_ip'))) {
@@ -93,10 +95,12 @@ function auth_register(string $email, string $name, string $password): array
         return ['ok' => false, 'error' => $pwError];
     }
     $existing = user_get_by_email($email);
+    $acceptedNow = $termsAccepted === true ? now() : null;
+    $acceptedVersion = $termsAccepted === true ? (string) config('terms_version', '') : null;
     if ($existing === null) {
         $uid = db_insert(
-            'INSERT INTO users (email, name, password_hash, role, status, created_at) VALUES (?,?,?,?,?,?)',
-            [$email, $name, auth_hash_password($password), 'customer', 'pending', now()]
+            'INSERT INTO users (email, name, password_hash, role, status, created_at, terms_accepted_at, terms_version) VALUES (?,?,?,?,?,?,?,?)',
+            [$email, $name, auth_hash_password($password), 'customer', 'pending', now(), $acceptedNow, $acceptedVersion]
         );
         $token = auth_create_token($uid, 'verify', 48 * 3600);
         send_mail($email, __('Confirm your e-mail address'), sprintf(
@@ -105,11 +109,20 @@ function auth_register(string $email, string $name, string $password): array
             site_url('/portal/verify.php?token=' . $token)
         ));
         audit('user.register', 'user', $uid, [], $uid);
+        if ($acceptedVersion !== null) {
+            audit('user.terms_accepted', 'user', $uid, ['version' => $acceptedVersion], $uid);
+        }
     } elseif ($existing['status'] === 'pending') {
         // The newest registration wins: whoever confirms the link owns the password they just chose.
         // (Otherwise someone could register a victim's address first and keep the password.)
         db_exec('UPDATE users SET password_hash = ?, name = ? WHERE id = ? AND status = \'pending\'',
             [auth_hash_password($password), $name, (int) $existing['id']]);
+        if ($acceptedVersion !== null) {
+            // The terms acceptance belongs to the newest registration as well.
+            db_exec('UPDATE users SET terms_accepted_at = ?, terms_version = ? WHERE id = ? AND status = \'pending\'',
+                [$acceptedNow, $acceptedVersion, (int) $existing['id']]);
+            audit('user.terms_accepted', 'user', (int) $existing['id'], ['version' => $acceptedVersion], (int) $existing['id']);
+        }
         $token = auth_create_token((int) $existing['id'], 'verify', 48 * 3600);
         send_mail($email, __('Confirm your e-mail address'), "Hello,\n\nplease confirm your e-mail address to activate your account:\n\n"
             . site_url('/portal/verify.php?token=' . $token) . "\n\nThe link is valid for 48 hours.");

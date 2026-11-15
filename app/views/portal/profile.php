@@ -2,7 +2,7 @@
 /**
  * @var array<string,mixed> $profile @var array<string,mixed> $s @var array<int,array<string,mixed>> $revisions
  * @var array<string,mixed>|null $open @var array<string,mixed>|null $previewRev @var string $preview
- * @var array<string,mixed>|null $rejection @var string[] $missing @var bool $readOnly
+ * @var array<string,mixed>|null $rejection @var string[] $missing @var bool $readOnly @var bool $termsAccepted
  */
 defined('TCD_APP') || exit;
 $pid = (int) $profile['id'];
@@ -72,6 +72,10 @@ $hasLive = $profile['live_revision_id'] !== null;
     <p class="pf-muted"><?= h(__('This imprint is suspended. Please contact us to have it reactivated.')) ?></p>
 <?php elseif ($open !== null && $open['state'] === 'draft'): ?>
     <p class="pf-muted"><?= h(__('You are working on a draft. It is only visible to you until you submit it and our team approves it.')) ?></p>
+<?php if (!$termsAccepted): ?>
+    <div class="pf-notice"><?= h(__('To submit this draft for review, please accept our current Terms and Conditions (AGB) first.')) ?>
+      <a href="/portal/terms.php"><?= h(__('Review and accept')) ?></a></div>
+<?php endif; ?>
     <div class="pf-actions">
       <a class="pf-btn" href="/portal/profile-edit.php?id=<?= $pid ?>"><?= h(__('Edit')) ?></a>
       <form class="pf-inline-form" method="post" action="/portal/profile-submit.php">

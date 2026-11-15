@@ -51,7 +51,7 @@ $script = basename((string) ($_SERVER['SCRIPT_NAME'] ?? ''));
 <footer class="pf-footer">
   <div class="pf-container">
     <a href="/">tcd-studio.de</a> · <a href="/imprint-protection/"><?= h(__('Imprint Protection')) ?></a> ·
-    <a href="/legal-notice/"><?= h(__('Legal Notice')) ?></a> · <a href="/privacy/"><?= h(__('Privacy Policy')) ?></a>
+    <a href="/legal-notice/"><?= h(__('Legal Notice')) ?></a> · <a href="/privacy/"><?= h(__('Privacy Policy')) ?></a> · <a href="/agb/"><?= h(__('Terms (AGB)')) ?></a>
     · <a href="mailto:<?= h((string) config('mail.contact')) ?>"><?= h((string) config('mail.contact')) ?></a>
   </div>
 </footer>

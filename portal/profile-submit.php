@@ -20,6 +20,7 @@ if ($open === null || $open['state'] !== 'draft') {
     redirect($back, ['error' => __('There is no draft to submit.')]);
 }
 
+portal_require_terms($user);          // submitting for review needs the current Terms and Conditions
 $result = portal_submit_draft($profile, $open, $user);
 if (!$result['ok']) {
     $fields = portal_error_fields($result['errors']);
