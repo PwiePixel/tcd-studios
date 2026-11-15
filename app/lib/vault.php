@@ -198,7 +198,8 @@ function vault_inbox_dir(): string
 /** Archive directory of the 'directory' driver. */
 function vault_archive_dir(): string
 {
-    $configured = trim((string) config('vault.dir', ''));
+    $env = getenv('TCD_VAULT_DIR');
+    $configured = ($env !== false && $env !== '') ? $env : trim((string) config('vault.dir', ''));
     $dir = $configured !== '' ? rtrim($configured, '/') : data_dir() . '/vault-archive';
     if (!is_dir($dir)) {
         @mkdir($dir, 0700, true);
