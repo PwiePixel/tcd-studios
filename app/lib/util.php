@@ -82,6 +82,46 @@ function config(string $key, $default = null)
     return $node;
 }
 
+/**
+ * Read a value from data/config.local.php, creating it ONCE if it does not exist yet (race-free: two parallel first
+ * requests must never generate two different values, e.g. two data keys).
+ *
+ * @param callable $factory returns the value to store when missing
+ * @return mixed
+ */
+function config_local_get_or_create(string $key, callable $factory)
+{
+    $local = data_dir() . '/config.local.php';
+    $lock = @fopen(data_dir() . '/config.local.lock', 'c');
+    if ($lock === false || !flock($lock, LOCK_EX)) {
+        throw new RuntimeException('Cannot lock data/config.local.lock (is data/ writable?)');
+    }
+    try {
+        $existing = [];
+        if (is_file($local)) {
+            $loaded = (static function () use ($local) {
+                return include $local;
+            })();
+            $existing = is_array($loaded) ? $loaded : [];
+        }
+        if (array_key_exists($key, $existing) && $existing[$key] !== '' && $existing[$key] !== null) {
+            return $existing[$key];
+        }
+        $value = $factory();
+        $existing[$key] = $value;
+        $code = "<?php\ndefined('TCD_APP') || exit;\nreturn " . var_export($existing, true) . ";\n";
+        $tmp = $local . '.tmp' . getmypid();
+        if (@file_put_contents($tmp, $code, LOCK_EX) === false || !@rename($tmp, $local)) {
+            throw new RuntimeException('Cannot write ' . $local);
+        }
+        @chmod($local, 0640);
+        return $value;
+    } finally {
+        flock($lock, LOCK_UN);
+        fclose($lock);
+    }
+}
+
 /** Absolute URL for a path on this site, e.g. site_url('/portal/login.php'). */
 function site_url(string $path = ''): string
 {

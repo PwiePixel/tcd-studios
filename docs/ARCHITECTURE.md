@@ -21,6 +21,19 @@ AGB-Zustimmung: Registrierung (Pflicht-Häkchen `accept_terms`) speichert `terms
 die Zustimmung zur aktuellen Version nach (`app/lib/portal_terms.php`: `portal_require_terms()` sperrt „Profil anlegen“ und „Einreichen“).
 Texte: `app/views/site/agb.php` (DE, verbindlich), `terms.php` (EN), Controller `app/lib/site_terms.php`, Styles `css/legal-text.css`.
 
+## Ausweisprüfung (Identity vault) und Löschung – Kern (app/lib/crypt.php, vault.php, erase.php)
+- **Adressdaten verschlüsselt** (`revisions.private_json`, libsodium secretbox, Schlüssel `data_key` in `data/config.local.php` –
+  zusammen mit der DB sichern!). Zugriff nur über `revision_*`-Funktionen (transparent).
+- **Ausweisfotos**: Upload → Validierung + Neu-Kodierung (JPEG, ohne Metadaten) → sofort **hybrid verschlüsselt** (AES-256-GCM, Schlüssel mit
+  dem öffentlichen RSA-Schlüssel aus `settings vault.public_key` verpackt, RSA-OAEP/SHA-1) → Ciphertext im Inbox-Verzeichnis `data/vault-inbox`.
+  Der **private Schlüssel liegt nie auf einem Server**; der Admin entschlüsselt im Browser (`js/vault.js`, WebCrypto).
+  Nach Freigabe: `identity_archive_request()` verschiebt den Ciphertext ins **Archiv** (Treiber `directory` oder S3-kompatibel, `config vault.*`),
+  prüft per Rücklesen + SHA-256 und überschreibt/löscht die Web-Server-Kopie. Blob-Format: `"TCDV1" | uint16 BE n | wrapped key (n) | iv(12) | ciphertext | tag(16)`.
+- Tabellen: `identity_requests`, `identity_files`, `deletion_requests`; `users.legal_hold`.
+- **Dienstende**: `termination_request()` (Antrag im System + Bestätigungslink) → `termination_confirm()` (nach Passwort + Häkchen)
+  → `account_erase()` löscht automatisch und unwiderruflich (Seiten offline, Ausweisdateien in Inbox + Archiv, Profile/Revisionen/Adressdaten,
+  Anfragen, Konto; Audit-Log pseudonymisiert; `PRAGMA secure_delete`). `legal_hold` (nur Admin) blockiert die Löschung.
+
 ## Verzeichnisse
 ```
 app/                  Code (per .htaccess gesperrt). bootstrap.php lädt app/lib/*.php

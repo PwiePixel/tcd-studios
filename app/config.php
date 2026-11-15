@@ -27,6 +27,22 @@ return [
     // customers are asked to accept the current version before they create or submit an imprint.
     'terms_version' => '2026-11-15',
 
+    // Identity vault (ID photos): encrypted on upload with the PUBLIC key set in the admin panel (the private key never
+    // touches a server), then moved to the archive; the web server copy is deleted.
+    //   driver 'directory': ciphertext files in `dir` (set it to a path OUTSIDE the web root, ideally on a separate
+    //                       volume/storage server; default: data/vault-archive)
+    //   driver 's3'       : any S3-compatible object storage (AWS S3, Hetzner/Backblaze/Wasabi/MinIO ...). Put the keys in
+    //                       data/config.local.php, never in this file.
+    'vault' => [
+        'driver' => 'directory',
+        'dir'    => '',
+        's3'     => ['endpoint' => '', 'region' => 'eu-central-1', 'bucket' => '', 'access_key' => '', 'secret_key' => '',
+                     'path_style' => true, 'prefix' => 'tcd-id/'],
+        'max_upload_bytes' => 8388608,   // 8 MB per image
+        'require_https'    => true,      // refuse ID uploads over plain http
+    ],
+    'termination_token_hours' => 24,     // validity of the confirmation link when a customer ends the service
+
     'password_min_length' => 10,
     'max_links'           => 12,
     'max_profiles_per_user' => 5,

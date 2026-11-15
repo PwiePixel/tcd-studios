@@ -18,15 +18,9 @@ function db_file(): string
     }
     $configured = (string) config('db_file', '');
     if ($configured === '' || !preg_match('/^[A-Za-z0-9._-]+$/', $configured)) {
-        $configured = 'db-' . random_token(8) . '.sqlite';
-        $local = data_dir() . '/config.local.php';
-        $existing = is_file($local) ? (array) (include $local) : [];
-        $existing['db_file'] = $configured;
-        $code = "<?php\ndefined('TCD_APP') || exit;\nreturn " . var_export($existing, true) . ";\n";
-        if (@file_put_contents($local, $code, LOCK_EX) === false) {
-            throw new RuntimeException('Cannot write ' . $local . ' (is data/ writable?)');
-        }
-        @chmod($local, 0640);
+        $configured = (string) config_local_get_or_create('db_file', static function () {
+            return 'db-' . random_token(8) . '.sqlite';
+        });
     }
     $file = data_dir() . '/' . $configured;
     return $file;
@@ -48,6 +42,7 @@ function db(): PDO
     @chmod($file, 0640);
     $pdo->exec('PRAGMA foreign_keys = ON');
     $pdo->exec('PRAGMA busy_timeout = 5000');
+    $pdo->exec('PRAGMA secure_delete = ON');      // deleted rows are overwritten with zeros (irrevocable erasure)
     db_migrate($pdo);
     return $pdo;
 }
@@ -264,6 +259,62 @@ CREATE INDEX idx_tokens_user ON tokens(user_id, type);
                 'Imprint protection for online shops and, in future, payment processing via Stripe. Available on request and in limited numbers.',
                 'Imprint protection for shops is not part of the standard offer for creators; it is agreed individually. Planned: your shop payments are processed through the Stripe API; we retain an agreed share of the revenue, take care of the tax settlement and pay out according to tax law. In the launch phase this is available on request and in limited numbers only.',
                 'on_request', 1, 'shops']);
+        },
+        6 => function (PDO $pdo): void {
+            // Identity verification (ID photos live in the vault, see vault.php), legal hold and deletion requests.
+            $pdo->exec("
+CREATE TABLE identity_requests (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+  profile_id INTEGER REFERENCES profiles(id) ON DELETE CASCADE,
+  status TEXT NOT NULL CHECK (status IN ('uploaded','verified','rejected','archived','erased')),
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL,
+  verified_at INTEGER,
+  verified_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  note TEXT NOT NULL DEFAULT ''
+);
+CREATE TABLE identity_files (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  request_id INTEGER NOT NULL REFERENCES identity_requests(id) ON DELETE CASCADE,
+  side TEXT NOT NULL CHECK (side IN ('front','back')),
+  mime TEXT NOT NULL,
+  plain_size INTEGER NOT NULL,
+  enc_size INTEGER NOT NULL,
+  enc_sha256 TEXT NOT NULL,
+  inbox_name TEXT,
+  archive_ref TEXT,
+  created_at INTEGER NOT NULL,
+  archived_at INTEGER,
+  deleted_at INTEGER
+);
+CREATE TABLE deletion_requests (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  user_ref INTEGER NOT NULL,
+  status TEXT NOT NULL CHECK (status IN ('requested','confirmed','on_hold','completed','cancelled')),
+  token_hash TEXT,
+  token_expires INTEGER,
+  hold_note TEXT NOT NULL DEFAULT '',
+  created_at INTEGER NOT NULL,
+  confirmed_at INTEGER,
+  completed_at INTEGER,
+  counts_json TEXT NOT NULL DEFAULT '{}'
+);
+CREATE INDEX idx_identity_profile ON identity_requests(profile_id, status);
+CREATE INDEX idx_identity_files_request ON identity_files(request_id);
+CREATE INDEX idx_deletion_status ON deletion_requests(status, created_at);
+");
+            $pdo->exec('ALTER TABLE users ADD COLUMN legal_hold INTEGER NOT NULL DEFAULT 0');
+            $pdo->exec("ALTER TABLE users ADD COLUMN legal_hold_note TEXT NOT NULL DEFAULT ''");
+            // Encrypt existing private (identity/address) data at rest.
+            $sel = $pdo->query('SELECT id, private_json FROM revisions');
+            $upd = $pdo->prepare('UPDATE revisions SET private_json = ? WHERE id = ?');
+            foreach ($sel->fetchAll(PDO::FETCH_ASSOC) as $row) {
+                if (!crypt_is_encrypted((string) $row['private_json'])) {
+                    $upd->execute([crypt_encrypt((string) $row['private_json'] === '' ? '{}' : (string) $row['private_json']), (int) $row['id']]);
+                }
+            }
         },
     ];
 }

@@ -109,7 +109,7 @@ function profile_create(?int $ownerId, string $slug, array $public, array $priva
         );
         db_insert(
             'INSERT INTO revisions (profile_id, number, state, public_json, private_json, created_at, updated_at) VALUES (?,?,?,?,?,?,?)',
-            [$pid, 1, 'draft', json_str($public), json_str($private), $t, $t]
+            [$pid, 1, 'draft', json_str($public), private_store($private), $t, $t]
         );
         return $pid;
     });
@@ -158,7 +158,7 @@ function revision_decode(?array $row): ?array
         return null;
     }
     $row['public'] = json_arr($row['public_json'] ?? null);
-    $row['private'] = json_arr($row['private_json'] ?? null);
+    $row['private'] = private_load($row['private_json'] ?? null);   // encrypted at rest (crypt.php)
     return $row;
 }
 
@@ -217,7 +217,7 @@ function revision_save_draft(int $revisionId, array $public, array $private): vo
 {
     $n = db_exec(
         'UPDATE revisions SET public_json = ?, private_json = ?, updated_at = ? WHERE id = ? AND state = \'draft\'',
-        [json_str($public), json_str($private), now(), $revisionId]
+        [json_str($public), private_store($private), now(), $revisionId]
     );
     if ($n !== 1) {
         throw new RuntimeException('Revision is not an editable draft.');

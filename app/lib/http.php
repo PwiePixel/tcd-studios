@@ -37,14 +37,29 @@ function require_post(): void
     }
 }
 
-/** Headers every dynamic page carries (strict CSP: no inline scripts/styles). */
-function send_security_headers(): void
+/**
+ * Headers every dynamic page carries (strict CSP: no inline scripts/styles).
+ *
+ * @param array<string,string> $csp optional per-page override of single CSP directives, e.g. ['img-src' => "'self' data: blob:"]
+ *                                  (calling it again after session_boot() replaces the header)
+ */
+function send_security_headers(array $csp = []): void
 {
     if (headers_sent()) {
         return;
     }
-    header('Content-Security-Policy: default-src \'none\'; style-src \'self\'; script-src \'self\'; img-src \'self\' data:; '
-        . 'font-src \'self\'; form-action \'self\'; base-uri \'none\'; frame-ancestors \'none\'');
+    $directives = ['default-src' => "'none'", 'style-src' => "'self'", 'script-src' => "'self'", 'img-src' => "'self' data:",
+        'font-src' => "'self'", 'form-action' => "'self'", 'base-uri' => "'none'", 'frame-ancestors' => "'none'"];
+    foreach ($csp as $name => $value) {
+        if (preg_match('/^[a-z-]+$/D', (string) $name) === 1 && preg_match('/^[\x20-\x7E]+$/D', (string) $value) === 1 && strpos((string) $value, ';') === false) {
+            $directives[$name] = (string) $value;
+        }
+    }
+    $policy = [];
+    foreach ($directives as $name => $value) {
+        $policy[] = $name . ' ' . $value;
+    }
+    header('Content-Security-Policy: ' . implode('; ', $policy));
     header('X-Content-Type-Options: nosniff');
     header('X-Frame-Options: DENY');
     header('Referrer-Policy: same-origin');
