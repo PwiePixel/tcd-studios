@@ -1,0 +1,6 @@
+User-agent: *
+Allow: /
+Disallow: /api.php
+Disallow: /backend/
+
+Sitemap: https://tcd-studio.de/sitemap.xml
