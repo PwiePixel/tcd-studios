@@ -170,7 +170,8 @@ function admin_post_raw(string $key): string
 /** Path of the one-time setup token file. */
 function admin_setup_token_file(): string
 {
-    return data_dir() . '/setup-token.txt';
+    // Not a fixed, guessable name: derived from the (random) database file name.
+    return data_dir() . '/setup-token-' . substr(hash('sha256', basename(db_file())), 0, 12) . '.txt';
 }
 
 /**

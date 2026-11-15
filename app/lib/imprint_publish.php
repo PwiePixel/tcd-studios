@@ -100,6 +100,11 @@ function imprint_unpublish(int $profileId): void
         $dir = legal_dir() . '/' . $profile['slug'];
         if (is_file($dir . '/index.html') || is_link($dir . '/index.html')) {
             @unlink($dir . '/index.html');
+            clearstatcache(true, $dir . '/index.html');
+            if (is_file($dir . '/index.html') || is_link($dir . '/index.html')) {
+                // A takedown that did not happen must never be reported as done (callers run inside a transaction and roll back).
+                throw new RuntimeException('Cannot remove the published page of "' . $profile['slug'] . '" (check file permissions of legal/).');
+            }
         }
         if (is_dir($dir)) {
             @rmdir($dir);       // only succeeds when the directory is empty

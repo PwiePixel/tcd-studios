@@ -23,6 +23,7 @@ if (is_post()) {
     csrf_verify();
     $action = post_str('action', 20);
     $noteValue = post_str('note', 2000);
+    $fingerprint = post_str('fp', 80);      // what the admin saw; see revision_fingerprint()
     $owner = $profile['owner_id'] !== null ? user_get((int) $profile['owner_id']) : null;
     $pid = (int) $profile['id'];
     $title = (string) ($rev['public']['display_name'] ?? $profile['slug']);
@@ -36,18 +37,24 @@ if (is_post()) {
             $formError = __('Please confirm that you verified the identity and address.');
         } else {
             try {
-                db_transaction(static function () use ($id, $pid, $admin, $noteValue) {
+                db_transaction(static function () use ($id, $pid, $admin, $noteValue, $fingerprint) {
                     $fresh = db_one('SELECT state FROM revisions WHERE id = ?', [$id]);
                     if (!$fresh || $fresh['state'] !== 'submitted') {
                         throw new RuntimeException('already processed', ADMIN_STATE_CONFLICT);
                     }
-                    revision_approve($id, (int) $admin['id'], $noteValue);
+                    revision_approve($id, (int) $admin['id'], $noteValue, $fingerprint);
                     db_exec('UPDATE profiles SET identity_verified = 1 WHERE id = ?', [$pid]);
                     imprint_publish($pid);
                 });
             } catch (Throwable $e) {
                 if ($e->getCode() === ADMIN_STATE_CONFLICT) {
                     redirect($self, ['error' => __('This revision has already been processed.')]);
+                }
+                if ($e->getMessage() === 'content changed') {
+                    redirect($self, ['error' => __('The customer changed this submission after you opened it. Please review the current version before you decide.')]);
+                }
+                if ($e->getMessage() === 'profile suspended') {
+                    redirect($self, ['error' => __('This imprint is suspended. Reactivate it first or reject the submission.')]);
                 }
                 error_log('review approve failed (revision ' . $id . '): ' . $e->getMessage());
                 $formError = __('The imprint could not be published, so nothing was changed. Please check the server log and try again.');
@@ -70,16 +77,19 @@ if (is_post()) {
             $formError = __('Please explain to the customer why the imprint was rejected (note is required).');
         } else {
             try {
-                db_transaction(static function () use ($id, $admin, $noteValue) {
+                db_transaction(static function () use ($id, $admin, $noteValue, $fingerprint) {
                     $fresh = db_one('SELECT state FROM revisions WHERE id = ?', [$id]);
                     if (!$fresh || $fresh['state'] !== 'submitted') {
                         throw new RuntimeException('already processed', ADMIN_STATE_CONFLICT);
                     }
-                    revision_reject($id, (int) $admin['id'], $noteValue);
+                    revision_reject($id, (int) $admin['id'], $noteValue, $fingerprint);
                 });
             } catch (Throwable $e) {
                 if ($e->getCode() === ADMIN_STATE_CONFLICT) {
                     redirect($self, ['error' => __('This revision has already been processed.')]);
+                }
+                if ($e->getMessage() === 'content changed') {
+                    redirect($self, ['error' => __('The customer changed this submission after you opened it. Please review the current version before you decide.')]);
                 }
                 error_log('review reject failed (revision ' . $id . '): ' . $e->getMessage());
                 $formError = __('The revision could not be rejected. Please try again.');

@@ -84,7 +84,7 @@ function abort(int $status, string $message = ''): void
  */
 function redirect(string $path, array $flash = []): void
 {
-    if (!preg_match('~^/(?!/)~', $path) && !preg_match('~^https?://~', $path)) {
+    if (!preg_match('~^/(?![/\\\\])~', $path) && !preg_match('~^https?://~', $path)) {
         $path = '/' . ltrim($path, '/');
     }
     if (preg_match('~^https?://~', $path)) {

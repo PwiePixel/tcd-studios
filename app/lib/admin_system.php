@@ -74,8 +74,8 @@ function admin_system_checks(): array
         $add(__('Mail delivery'), function_exists('mail') ? 'ok' : 'fail', function_exists('mail') ? __('PHP mail() is available – use the test button to verify delivery') : __('PHP mail() is not available'));
     }
 
-    if (is_file($data . '/setup-token.txt') && admin_exists()) {
-        $add(__('Setup token'), 'warn', __('An old setup-token.txt is still in the data directory. Delete it.'));
+    if (is_file(admin_setup_token_file()) && admin_exists()) {
+        $add(__('Setup token'), 'warn', __('An old setup token file is still in the data directory (setup-token-….txt). Delete it.'));
     }
 
     return $checks;

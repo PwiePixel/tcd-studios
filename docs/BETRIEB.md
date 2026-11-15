@@ -45,7 +45,7 @@ Es gibt **noch keine Zahlungsabwicklung** in dieser Software – das System verw
    Kunden-Impressen · `privacy-policy` = Datenschutz-Kontakt · `info` = allgemein · `no-reply` = Absender aller
    System-Mails (sollte beim selben Mail-Host liegen, wegen SPF/DKIM). Andere Adressen: `data/config.local.php`.
 3. **Admin-Konto anlegen**: `https://tcd-studio.de/admin/setup.php` aufrufen. Der Setup-Token steht in der Datei
-   `data/setup-token.txt` (per FTP/SSH lesen). Alternativ per SSH: `php tools/create-admin.php`.
+   `data/setup-token-….txt` (eine Datei, deren Name mit `setup-token-` beginnt; per FTP/SSH lesen). Alternativ per SSH: `php tools/create-admin.php`.
 4. Als Admin anmelden → **Account → Zwei-Faktor-Anmeldung aktivieren** (empfohlen) → **Settings → System checks**
    prüfen (alles grün?).
 5. Die drei bisherigen Creator-Impressen (PixelCST, CreepyX_470, TTH Projects) sind bereits importiert und live; die alten

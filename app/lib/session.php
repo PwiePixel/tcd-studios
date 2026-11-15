@@ -18,6 +18,13 @@ function session_boot(string $area): void
         throw new InvalidArgumentException('unknown area');
     }
     $GLOBALS['TCD_AREA'] = $area;
+    set_exception_handler(static function (Throwable $e): void {
+        error_log('app: ' . get_class($e) . ': ' . $e->getMessage() . ' in ' . basename($e->getFile()) . ':' . $e->getLine());
+        while (ob_get_level() > 0) {
+            ob_end_clean();
+        }
+        abort(500, __('Something went wrong on our side. Please try again later.'));
+    });
     $idle = (int) config($area === 'admin' ? 'admin_idle_seconds' : 'portal_idle_seconds', 1800);
 
     ini_set('session.use_strict_mode', '1');

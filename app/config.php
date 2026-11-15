@@ -32,10 +32,14 @@ return [
     // [max attempts, window in seconds]
     'rate' => [
         'login_ip'     => [30, 900],
-        'login_email'  => [6, 900],
+        'login_email'  => [6, 900],       // per e-mail address AND ip
+        'login_account' => [40, 900],     // per account over all IPs (distributed guessing)
+        'register_email' => [3, 3600],
         'register_ip'  => [10, 3600],
         'reset_ip'     => [10, 3600],
-        'reset_email'  => [3, 3600],
+        'reset_email'  => [3, 3600],      // per e-mail address AND ip
+        'reset_account' => [20, 3600],    // per e-mail address over all IPs
+        'pwchange'     => [6, 900],
         'request_ip'   => [5, 3600],
         'totp'         => [8, 900],
     ],

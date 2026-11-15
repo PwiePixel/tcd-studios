@@ -265,18 +265,40 @@ function revision_submit(int $revisionId): void
 }
 
 /**
+ * Fingerprint of everything an admin looks at when reviewing a revision (content + submission time).
+ * The review form carries it back so that a revision that was withdrawn, edited and resubmitted in the
+ * meantime cannot be approved or rejected by a stale form.
+ *
+ * @param array<string,mixed> $row raw revision row (needs public_json, private_json, submitted_at, updated_at)
+ */
+function revision_fingerprint(array $row): string
+{
+    return hash('sha256', (string) $row['public_json'] . '|' . (string) $row['private_json'] . '|'
+        . (string) ($row['submitted_at'] ?? '') . '|' . (string) $row['updated_at']);
+}
+
+/**
  * Approve a submitted revision: it becomes the live one, the previous live revision is superseded.
  * (Writing the static page is done by the caller via imprint_publish()).
+ *
+ * @param string|null $fingerprint if given, the revision must still match it (see revision_fingerprint())
+ * @throws RuntimeException 'content changed' | 'profile suspended' | other state errors
  */
-function revision_approve(int $revisionId, int $adminId, string $note = ''): void
+function revision_approve(int $revisionId, int $adminId, string $note = '', ?string $fingerprint = null): void
 {
-    db_transaction(static function () use ($revisionId, $adminId, $note) {
+    db_transaction(static function () use ($revisionId, $adminId, $note, $fingerprint) {
         $r = db_one('SELECT * FROM revisions WHERE id = ?', [$revisionId]);
         if (!$r || $r['state'] !== 'submitted') {
             throw new RuntimeException('Only a submitted revision can be approved.');
         }
+        if ($fingerprint !== null && !hash_equals(revision_fingerprint($r), $fingerprint)) {
+            throw new RuntimeException('content changed');
+        }
         $t = now();
         $p = profile_get((int) $r['profile_id']);
+        if ($p && $p['status'] === 'suspended') {
+            throw new RuntimeException('profile suspended');
+        }
         if ($p && $p['live_revision_id'] !== null) {
             db_exec('UPDATE revisions SET state = \'superseded\', updated_at = ? WHERE id = ? AND state = \'approved\'', [$t, (int) $p['live_revision_id']]);
         }
@@ -292,12 +314,15 @@ function revision_approve(int $revisionId, int $adminId, string $note = ''): voi
 }
 
 /** Reject a submitted revision (the live version, if any, stays online). */
-function revision_reject(int $revisionId, int $adminId, string $note): void
+function revision_reject(int $revisionId, int $adminId, string $note, ?string $fingerprint = null): void
 {
-    db_transaction(static function () use ($revisionId, $adminId, $note) {
+    db_transaction(static function () use ($revisionId, $adminId, $note, $fingerprint) {
         $r = db_one('SELECT * FROM revisions WHERE id = ?', [$revisionId]);
         if (!$r || $r['state'] !== 'submitted') {
             throw new RuntimeException('Only a submitted revision can be rejected.');
+        }
+        if ($fingerprint !== null && !hash_equals(revision_fingerprint($r), $fingerprint)) {
+            throw new RuntimeException('content changed');
         }
         $t = now();
         db_exec(

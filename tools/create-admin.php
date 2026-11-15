@@ -60,5 +60,5 @@ try {
     exit(1);
 }
 // The setup token is no longer needed once an admin exists.
-@unlink(data_dir() . '/setup-token.txt');
+@unlink(admin_setup_token_file());
 echo 'Admin account created (id ' . $uid . "). You can sign in at /admin/login.php\n";

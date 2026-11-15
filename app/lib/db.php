@@ -87,18 +87,25 @@ function db_insert(string $sql, array $params = []): int
 /** Run $fn inside a transaction (rolls back on exception; joins an already open transaction). @return mixed */
 function db_transaction(callable $fn)
 {
+    static $depth = 0;
     $pdo = db();
-    if ($pdo->inTransaction()) {
+    if ($depth > 0) {
         return $fn();          // join the surrounding transaction (the outer caller commits/rolls back)
     }
-    $pdo->beginTransaction();
+    // IMMEDIATE takes the write lock up front: concurrent writers wait (busy_timeout) instead of failing with "database is locked".
+    $pdo->exec('BEGIN IMMEDIATE');
+    $depth++;
     try {
         $result = $fn();
-        $pdo->commit();
+        $pdo->exec('COMMIT');
+        $depth--;
         return $result;
     } catch (Throwable $e) {
-        if ($pdo->inTransaction()) {
-            $pdo->rollBack();
+        $depth--;
+        try {
+            $pdo->exec('ROLLBACK');
+        } catch (Throwable $ignored) {
+            // no transaction active any more
         }
         throw $e;
     }
@@ -242,6 +249,7 @@ CREATE INDEX idx_tokens_user ON tokens(user_id, type);
                 $pdo->prepare('UPDATE profiles SET live_revision_id = ? WHERE id = ?')->execute([$rid, $pid]);
             }
         },
+        4 => 'ALTER TABLE users ADD COLUMN session_epoch INTEGER NOT NULL DEFAULT 0',
     ];
 }
 

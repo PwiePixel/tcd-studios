@@ -82,6 +82,9 @@ function auth_register(string $email, string $name, string $password): array
     if (!v_email($email)) {
         return ['ok' => false, 'error' => __('Please enter a valid e-mail address.')];
     }
+    if (!rate_limit_hit('register:email:' . hash('sha256', $email), config('rate.register_email'))) {
+        return ['ok' => true, 'error' => ''];      // silently stop mailing the same address again and again
+    }
     if (!v_len($name, 2, 80) || !v_oneline($name)) {
         return ['ok' => false, 'error' => __('Please enter your name (2–80 characters).')];
     }
@@ -103,7 +106,10 @@ function auth_register(string $email, string $name, string $password): array
         ));
         audit('user.register', 'user', $uid, [], $uid);
     } elseif ($existing['status'] === 'pending') {
-        // Re-send the confirmation link (the stored password stays unchanged).
+        // The newest registration wins: whoever confirms the link owns the password they just chose.
+        // (Otherwise someone could register a victim's address first and keep the password.)
+        db_exec('UPDATE users SET password_hash = ?, name = ? WHERE id = ? AND status = \'pending\'',
+            [auth_hash_password($password), $name, (int) $existing['id']]);
         $token = auth_create_token((int) $existing['id'], 'verify', 48 * 3600);
         send_mail($email, __('Confirm your e-mail address'), "Hello,\n\nplease confirm your e-mail address to activate your account:\n\n"
             . site_url('/portal/verify.php?token=' . $token) . "\n\nThe link is valid for 48 hours.");
@@ -139,13 +145,21 @@ function auth_login(string $email, string $password, string $role): array
 {
     $email = mb_strtolower(trim($email), 'UTF-8');
     $generic = ['ok' => false, 'error' => __('E-mail or password is wrong.'), 'user' => null];
+    $acct = hash('sha256', $role . $email);
+    $emailIp = hash('sha256', $role . $email . '|' . client_ip());
     if (!rate_limit_hit('login:ip:' . client_ip(), config('rate.login_ip'))
-        || !rate_limit_hit('login:email:' . hash('sha256', $role . $email), config('rate.login_email'))) {
+        || !rate_limit_hit('login:ei:' . $emailIp, config('rate.login_email'))
+        || !rate_limit_hit('login:acct:' . $acct, config('rate.login_account'))) {
         return ['ok' => false, 'error' => __('Too many attempts. Please try again in a few minutes.'), 'user' => null];
     }
     $user = $email !== '' && strlen($email) <= 254 ? user_get_by_email($email) : null;
     // Always run one password verification so timing does not reveal whether the account exists.
-    $dummy = '$2y$10$CZFUUcJS6DmBeBFDQROGHOPUo2E8.DSonPr4OiVMECsb12Dr2peZa';
+    // The dummy hash is created with the same algorithm/cost as real hashes (and renewed when PHP's default changes).
+    $dummy = (string) setting_get('auth.dummy_hash', '');
+    if ($dummy === '' || password_needs_rehash($dummy, PASSWORD_DEFAULT)) {
+        $dummy = password_hash(random_token(12), PASSWORD_DEFAULT);
+        setting_set('auth.dummy_hash', $dummy);
+    }
     $valid = password_verify($password, $user ? (string) $user['password_hash'] : $dummy);
     if (!$user || !$valid || $user['role'] !== $role) {
         return $generic;
@@ -159,7 +173,7 @@ function auth_login(string $email, string $password, string $role): array
     if (password_needs_rehash((string) $user['password_hash'], PASSWORD_DEFAULT)) {
         db_exec('UPDATE users SET password_hash = ? WHERE id = ?', [auth_hash_password($password), (int) $user['id']]);
     }
-    rate_limit_clear('login:email:' . hash('sha256', $role . $email));
+    rate_limit_clear('login:ei:' . $emailIp);
     return ['ok' => true, 'error' => '', 'user' => $user];
 }
 
@@ -168,7 +182,9 @@ function auth_login_complete(array $user): void
 {
     session_regenerate_id(true);
     $keep = $_SESSION['last_seen'] ?? now();
-    $_SESSION = ['uid' => (int) $user['id'], 'role' => (string) $user['role'], 'login_at' => now(), 'last_seen' => $keep];
+    $fresh = user_get((int) $user['id']);
+    $_SESSION = ['uid' => (int) $user['id'], 'role' => (string) $user['role'], 'login_at' => now(), 'last_seen' => $keep,
+                 'epoch' => (int) ($fresh['session_epoch'] ?? 0)];
     db_exec('UPDATE users SET last_login_at = ? WHERE id = ?', [now(), (int) $user['id']]);
     audit('user.login', 'user', (int) $user['id'], ['area' => current_area()], (int) $user['id']);
 }
@@ -180,8 +196,9 @@ function auth_current_user(): ?array
         return null;
     }
     $user = user_get((int) $_SESSION['uid']);
-    if (!$user || $user['status'] !== 'active' || $user['role'] !== ($_SESSION['role'] ?? '')) {
-        $_SESSION = [];
+    if (!$user || $user['status'] !== 'active' || $user['role'] !== ($_SESSION['role'] ?? '')
+        || (int) $user['session_epoch'] !== (int) ($_SESSION['epoch'] ?? -1)) {
+        $_SESSION = [];     // disabled, role changed, or the password was changed/reset since this login
         return null;
     }
     $area = current_area();
@@ -216,6 +233,12 @@ function auth_logout(): void
     }
 }
 
+/** Invalidate every session of a user (called after a password change/reset). */
+function auth_bump_session_epoch(int $userId): void
+{
+    db_exec('UPDATE users SET session_epoch = session_epoch + 1 WHERE id = ?', [$userId]);
+}
+
 /** Send a password reset link. Silent for unknown addresses (no enumeration). */
 function auth_request_reset(string $email, string $role): array
 {
@@ -226,7 +249,8 @@ function auth_request_reset(string $email, string $role): array
     if (!v_email($email)) {
         return ['ok' => false, 'error' => __('Please enter a valid e-mail address.')];
     }
-    if (rate_limit_hit('reset:email:' . hash('sha256', $email), config('rate.reset_email'))) {
+    if (rate_limit_hit('reset:account:' . hash('sha256', $email), config('rate.reset_account'))
+        && rate_limit_hit('reset:ei:' . hash('sha256', $email . '|' . client_ip()), config('rate.reset_email'))) {
         $user = user_get_by_email($email);
         if ($user && $user['status'] === 'active' && $user['role'] === $role) {
             $token = auth_create_token((int) $user['id'], 'reset', 3600);
@@ -259,6 +283,7 @@ function auth_reset_password(string $token, string $newPassword, string $role): 
         return $err;
     }
     db_exec('UPDATE users SET password_hash = ? WHERE id = ?', [auth_hash_password($newPassword), (int) $user['id']]);
+    auth_bump_session_epoch((int) $user['id']);
     audit('user.password_reset', 'user', (int) $user['id'], [], (int) $user['id']);
     return null;
 }
@@ -267,6 +292,9 @@ function auth_reset_password(string $token, string $newPassword, string $role): 
 function auth_change_password(int $userId, string $current, string $new): ?string
 {
     $user = user_get($userId);
+    if (!rate_limit_hit('pwchange:' . $userId, config('rate.pwchange'))) {
+        return __('Too many attempts. Please try again in a few minutes.');
+    }
     if (!$user || !password_verify($current, (string) $user['password_hash'])) {
         return __('The current password is wrong.');
     }
@@ -275,6 +303,11 @@ function auth_change_password(int $userId, string $current, string $new): ?strin
         return $err;
     }
     db_exec('UPDATE users SET password_hash = ? WHERE id = ?', [auth_hash_password($new), $userId]);
+    auth_bump_session_epoch($userId);
+    if (!empty($_SESSION['uid']) && (int) $_SESSION['uid'] === $userId) {
+        $fresh = user_get($userId);
+        $_SESSION['epoch'] = (int) ($fresh['session_epoch'] ?? 0);      // this session stays valid, all others end
+    }
     audit('user.password_changed', 'user', $userId, [], $userId);
     return null;
 }

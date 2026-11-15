@@ -7,7 +7,7 @@ defined('TCD_APP') || exit;
   <?php if (!$tokenReady): ?>
     <div class="pf-notice"><?= h(__('The setup token could not be created. Please make sure the data directory is writable by the web server and reload this page.')) ?></div>
   <?php else: ?>
-  <p><?= h(__('Create the first admin account. To prove that you own this server, enter the setup token. You find it in the file setup-token.txt in the data directory of the installation (read it via FTP or SSH). The file is deleted automatically once the account exists.')) ?></p>
+  <p><?= h(__('Create the first admin account. To prove that you own this server, enter the setup token. You find it in the file setup-token-….txt (the name starts with setup-token-) in the data directory of the installation (read it via FTP or SSH). The file is deleted automatically once the account exists.')) ?></p>
   <?php if (!empty($errors['form'])): ?><div class="pf-flash pf-flash--error" role="alert"><?= h($errors['form']) ?></div><?php endif; ?>
   <form class="pf-form" method="post" action="/admin/setup.php" autocomplete="off">
     <?= csrf_field() ?>

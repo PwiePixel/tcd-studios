@@ -20,7 +20,7 @@ app/                  Code (per .htaccess gesperrt). bootstrap.php lädt app/lib
 portal/*.php          Kunden-Bereich – ein Einstiegsskript je Seite (kein URL-Rewriting nötig)
 admin/*.php           Admin-Bereich – dito
 legal/<slug>/index.html   ERZEUGTE, freigegebene Impressen (statisch, Design wie bisherige legal-notice-*-Seiten)
-data/                 Laufzeitdaten (SQLite, config.local.php, setup-token) – nie committen, per .htaccess gesperrt
+data/                 Laufzeitdaten (SQLite, config.local.php, setup-token-<zufall>.txt) – nie committen, per .htaccess gesperrt
 css/portal.css        Styles Portal/Admin (Klassen unten)
 ```
 Öffentliche Seiten: `services/`, `imprint-protection/`, `shops/`, `coming-soon/` (jeweils `index.php`, Sitejet-Rahmen).

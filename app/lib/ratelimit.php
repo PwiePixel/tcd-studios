@@ -14,6 +14,9 @@ function rate_limit_hit(string $key, array $limit): bool
 {
     [$max, $window] = $limit;
     $key = substr($key, 0, 190);
+    if (random_int(1, 50) === 1) {
+        rate_limit_gc();         // keep the table small
+    }
     $t = now();
     return (bool) db_transaction(static function () use ($key, $max, $window, $t) {
         $row = db_one('SELECT hits, window_start FROM rate_limits WHERE k = ?', [$key]);
