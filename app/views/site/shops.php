@@ -61,7 +61,7 @@ $err = static function (string $name) use ($errors): string {
             </div>
             <div class="site-grid">
               <div class="site-card">
-                <h4>Request instead of sign-up</h4>
+                <h4>On request</h4>
                 <p>Send us a request below. We look at every shop individually and get back to you by e-mail.</p>
               </div>
               <div class="site-card">
