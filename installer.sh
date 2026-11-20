@@ -1296,6 +1296,13 @@ setup_app() {
     out=$(printf '%s\n' "$cfg" | hp config-set 2>&1) || { printf '%s\n' "$out" >&2; die "Die Einstellungen konnten nicht geschrieben werden."; }
     ok "Einstellungen gespeichert (Adresse, Postfächer, Proxy: $PROXY)."
 
+    # Impressums-Seiten, Weiterleitungen und sitemap.xml werden aus der Datenbank erzeugt (sie liegen bewusst nicht im Git).
+    local rc=0
+    out=$(as_web env "TCD_DATA_DIR=$DATA_DIR" "$PHP" "$ROOT/tools/publish-all.php" 2>&1) || rc=$?
+    if [ "$rc" -eq 0 ]; then ok "Impressums-Seiten und sitemap.xml erzeugt."
+    else bad "Impressums-Seiten/sitemap.xml konnten nicht erzeugt werden: $(printf '%s' "$out" | tail -n2 | tr '\n' ' ')"
+    fi
+
     todo "Postfächer beim Mail-Anbieter anlegen: contact@, info@, imprint@, privacy-policy@ und no-reply@$MAIL_DOMAIN (SPF/DKIM für $MAIL_DOMAIN einrichten, sonst landen Mails im Spam)."
     todo "Backups: $DATA_DIR vollständig sichern – Datenbank und config.local.php (Datenschlüssel!) IMMER zusammen; ohne den Schlüssel sind die Adressdaten für immer unlesbar. Backups verschlüsseln. Den privaten Tresor-Schlüssel NICHT in dieses Backup."
 }
@@ -1500,7 +1507,8 @@ setup_cron() {
     fi
 }
 
-HTACCESS_BEGIN="# BEGIN tcd-installer"
+HTACCESS_BEGIN="# BEGIN tcd-installer v2"
+HTACCESS_OLD_BEGIN="# BEGIN tcd-installer"
 HTACCESS_END="# END tcd-installer"
 
 setup_guard() {
@@ -1515,15 +1523,23 @@ setup_guard() {
         Deny from all
     </IfModule>
 </FilesMatch>
+<IfModule mod_alias.c>
+    RedirectMatch 404 /\.git(/|\$)
+</IfModule>
 $HTACCESS_END"
+    if [ -f "$f" ] && [ ! -L "$f" ] && ! grep -qxF -- "$HTACCESS_BEGIN" "$f" && grep -qxF -- "$HTACCESS_OLD_BEGIN" "$f"; then
+        # ältere Fassung des Blocks entfernen, die neue wird unten angehängt
+        local tmpf="$f.tcd-tmp$$"
+        awk -v b="$HTACCESS_OLD_BEGIN" -v e="$HTACCESS_END" '$0 == b { skip = 1; next } skip && $0 == e { skip = 0; next } !skip' "$f" >"$tmpf" && chmod 0644 -- "$tmpf" && mv -f -- "$tmpf" "$f"
+    fi
     if [ -L "$f" ]; then
         warn "$f ist ein symbolischer Link – wird nicht verändert."
     elif [ -f "$f" ] && grep -qF -- "$HTACCESS_BEGIN" "$f"; then
-        ok "Schutzregel für installer.sh in .htaccess vorhanden."
+        ok "Schutzregeln (installer.sh, .git) in .htaccess vorhanden."
     elif [ -f "$f" ]; then
-        if printf '\n%s\n' "$block" >>"$f"; then ok "Schutzregel für installer.sh an die bestehende .htaccess angehängt (der bisherige Inhalt bleibt)."; else warn "Die .htaccess konnte nicht ergänzt werden."; fi
+        if printf '\n%s\n' "$block" >>"$f"; then ok "Schutzregeln (installer.sh, .git) an die bestehende .htaccess angehängt (der bisherige Inhalt bleibt)."; else warn "Die .htaccess konnte nicht ergänzt werden."; fi
     elif printf '%s\n' "$block" >"$f" && chmod 0644 -- "$f"; then
-        ok "Schutzregel für installer.sh in neuer .htaccess angelegt."
+        ok "Schutzregeln (installer.sh, .git) in neuer .htaccess angelegt."
     else
         warn "Die .htaccess konnte nicht angelegt werden."
     fi
@@ -1542,6 +1558,7 @@ print_nginx_rules() {
     say "      location ^~ /backend/ { deny all; return 404; }"
     say "      location ^~ /docs/    { deny all; return 404; }"
     say "      location = /installer.sh { deny all; return 404; }"
+    say "      location ^~ /.git     { deny all; return 404; }"
     say "      client_max_body_size 20m;   # Ausweisfotos; dazu in PHP: upload_max_filesize = 9M, post_max_size = 20M"
 }
 
@@ -1593,12 +1610,16 @@ http_checks() {
             bad "GEFAHR: /$rel/ ist über das Internet abrufbar!"
         fi
     done
+    if [ -f "$ROOT/.git/HEAD" ]; then
+        code=$(http_code "$SITE_URL/.git/HEAD" follow)
+        if [ "$code" = 200 ]; then exposed=1; bad "GEFAHR: /.git/ ist über das Internet abrufbar (Quellcode und Verlauf)!"; fi
+    fi
     if [ -f "$ROOT/installer.sh" ]; then
         code=$(http_code "$SITE_URL/installer.sh" follow)
         if [ "$code" = 200 ]; then exposed=1; bad "/installer.sh ist über das Internet abrufbar – löschen oder sperren."; fi
     fi
     if [ "$exposed" = 0 ]; then
-        ok "app/, tools/, backend/, docs/$([ "$DATA_INSIDE" = 1 ] && printf ', data/') und installer.sh sind von außen nicht abrufbar."
+        ok "app/, tools/, backend/, docs/$([ "$DATA_INSIDE" = 1 ] && printf ', data/')$([ -d "$ROOT/.git" ] && printf ', .git/') und installer.sh sind von außen nicht abrufbar."
     else
         say "  So wird gesperrt:"
         say "    Apache: Die mitgelieferten .htaccess-Dateien greifen nur mit \"AllowOverride All\" (oder mindestens AuthConfig/Limit)"
