@@ -1096,6 +1096,17 @@ show_plan() {
 # ------------------------------------------------------------------------------------------------------------------
 POINTER_FILE=""
 
+write_marker() {   # write_marker DATEI TEXT – in einem Verzeichnis, das PHP beschreiben kann, als Webserver-Benutzer schreiben
+    local dir
+    dir=$(dirname -- "$1")
+    if is_root && [ "$(stat -c '%u' -- "$dir" 2>/dev/null || echo 0)" != 0 ]; then
+        as_web sh -c 'rm -f -- "$2"; umask 022; printf "%s\n" "$1" >"$2"' sh "$2" "$1" 2>/dev/null || warn "Die Markierung $1 konnte nicht geschrieben werden."
+    else
+        rm -f -- "$1" 2>/dev/null || true
+        ( umask 022; set -C; printf '%s\n' "$2" >"$1" ) 2>/dev/null || warn "Die Markierung $1 konnte nicht geschrieben werden."
+    fi
+}
+
 write_pointer() {
     local tmp="$POINTER_FILE.tmp$$"
     printf '%s\n' "$DATA_DIR" >"$tmp" || die "Der Zeiger $POINTER_FILE konnte nicht geschrieben werden (Rechte auf app/?)."
@@ -1121,13 +1132,16 @@ make_data_dir() {      # legt DATA_DIR an (nur die letzte Komponente) und prüft
     if [ "$created" = 1 ]; then ok "Verzeichnis angelegt: $DATA_DIR"; else ok "Verzeichnis vorhanden: $DATA_DIR"; fi
 }
 
-remove_old_entries() { # Inhalt des alten Datenverzeichnisses entfernen (außer .htaccess/.gitkeep/.tcd-moved)
-    local old=$1 e
-    for e in "$old"/* "$old"/.[!.]* "$old"/..?*; do
-        if [ ! -e "$e" ] && [ ! -L "$e" ]; then continue; fi
-        case ${e##*/} in .htaccess|.gitkeep|.tcd-moved) continue ;; esac
-        if [ -f "$e" ] && [ ! -L "$e" ] && has_cmd shred; then shred -u -- "$e" 2>/dev/null || rm -f -- "$e"; else rm -rf -- "$e"; fi
-    done
+remove_old_entries() { # Inhalt des alten Datenverzeichnisses entfernen (außer .htaccess/.gitkeep/.tcd-moved) – als Webserver-Benutzer,
+                       # damit untergeschobene Symlinks root nie auf fremde Dateien lenken können
+    local old=$1
+    if has_cmd shred; then
+        as_web find "$old" -mindepth 1 -type f ! -name .htaccess ! -name .gitkeep ! -name .tcd-moved -exec shred -u -- {} + 2>/dev/null || true
+    fi
+    as_web find "$old" -mindepth 1 -maxdepth 1 ! -name .htaccess ! -name .gitkeep ! -name .tcd-moved -exec rm -rf -- {} + 2>/dev/null || true
+    if [ -n "$(find "$old" -mindepth 1 -maxdepth 1 ! -name .htaccess ! -name .gitkeep ! -name .tcd-moved 2>/dev/null | head -n1)" ]; then
+        warn "Nicht alles in $old konnte gelöscht werden – bitte von Hand prüfen und löschen (es sind Kopien der Daten)."
+    fi
 }
 
 move_data() {
@@ -1135,12 +1149,13 @@ move_data() {
     make_data_dir
     if [ "$RESUME_MOVE" = 1 ]; then
         note "Ein abgebrochener Umzug wird neu begonnen: der unvollständige Inhalt von $DATA_DIR wird verworfen (das Original in $old ist unverändert)."
-        find "$DATA_DIR" -mindepth 1 -maxdepth 1 ! -name .tcd-move-incomplete -exec rm -rf -- {} +
+        as_web find "$DATA_DIR" -mindepth 1 -maxdepth 1 ! -name .tcd-move-incomplete -exec rm -rf -- {} +
     fi
-    printf '%s\n' "$old" >"$DATA_DIR/.tcd-move-incomplete"
+    as_web sh -c 'rm -f -- "$2" && printf "%s\n" "$1" >"$2"' sh "$old" "$DATA_DIR/.tcd-move-incomplete"
 
     # Während des Kopierens kann die Website nur lesen: kein Request kann eine neue Datenbank/einen neuen Schlüssel anlegen.
     mode=$(stat -c '%a' -- "$old" 2>/dev/null || echo 750)
+    if [ -L "$old" ]; then die "Das bisherige Datenverzeichnis ist ein symbolischer Link – bitte von Hand umziehen."; fi
     MOVE_LOCKED_DIR=$old; MOVE_LOCKED_MODE=$mode
     chmod a-w -- "$old"
     say "  Die Website ist jetzt kurz nur lesbar. Kopiere …"
@@ -1148,16 +1163,16 @@ move_data() {
         if [ ! -e "$e" ] && [ ! -L "$e" ]; then continue; fi
         name=${e##*/}
         case $name in .htaccess|.gitkeep|.tcd-moved|config.local.lock) continue ;; esac
-        cp -pR -- "$e" "$DATA_DIR/" || die "Kopieren von $e ist fehlgeschlagen. Das Original in $old ist unverändert; der Installer kann erneut gestartet werden."
+        # als Webserver-Benutzer kopieren: er besitzt Quelle und Ziel, root folgt so keinen untergeschobenen Links
+        as_web cp -pR -- "$e" "$DATA_DIR/" || die "Kopieren von $e ist fehlgeschlagen. Das Original in $old ist unverändert; der Installer kann erneut gestartet werden."
         n=$((n + 1))
     done
-    cmp -s -- "$old/config.local.php" "$DATA_DIR/config.local.php" || die "Prüfung nach dem Kopieren fehlgeschlagen (config.local.php). Original unverändert in $old."
+    as_web cmp -s -- "$old/config.local.php" "$DATA_DIR/config.local.php" || die "Prüfung nach dem Kopieren fehlgeschlagen (config.local.php). Original unverändert in $old."
     for e in "$old"/*.sqlite; do
         if [ -f "$e" ]; then
-            cmp -s -- "$e" "$DATA_DIR/${e##*/}" || die "Prüfung nach dem Kopieren fehlgeschlagen (${e##*/}). Original unverändert in $old."
+            as_web cmp -s -- "$e" "$DATA_DIR/${e##*/}" || die "Prüfung nach dem Kopieren fehlgeschlagen (${e##*/}). Original unverändert in $old."
         fi
     done
-    if is_root; then chown -hR "$WEB_USER:$WEB_GROUP" -- "$DATA_DIR"; fi
     if [ -n "$WEB_GROUP" ] && ! is_root; then
         chgrp -hR "$WEB_GROUP" -- "$DATA_DIR" 2>/dev/null || true
         chmod -R g+rwX -- "$DATA_DIR" 2>/dev/null || true
@@ -1169,7 +1184,7 @@ move_data() {
 
     chmod "$mode" -- "$old"; MOVE_LOCKED_DIR=""
     remove_old_entries "$old"
-    rm -f -- "$DATA_DIR/.tcd-move-incomplete"
+    as_web rm -f -- "$DATA_DIR/.tcd-move-incomplete"
     ok "Die alte Kopie in $old wurde gelöscht."
 }
 
@@ -1177,16 +1192,20 @@ finish_interrupted_move() {    # Zeiger steht schon, aber das Aufräumen fehlt n
     if [ ! -f "$DATA_DIR/.tcd-move-incomplete" ]; then return 0; fi
     local old
     old=$(head -n1 -- "$DATA_DIR/.tcd-move-incomplete" 2>/dev/null || true)
-    if [ -n "$old" ] && [ "$old" != "$DATA_DIR" ] && [ -d "$old" ] && [ -f "$old/config.local.php" ]; then
-        if cmp -s -- "$old/config.local.php" "$DATA_DIR/config.local.php"; then
-            chmod u+w -- "$old" 2>/dev/null || true
+    # Die Markierung liegt in einem Verzeichnis, das PHP beschreiben kann: aufgeräumt wird deshalb nur der bekannte Ort <Webroot>/data.
+    if [ -n "$old" ] && [ "$old" != "$ROOT_REAL/data" ]; then
+        warn "Ein früherer Umzug wurde nicht fertig aufgeräumt. Bitte die alte Kopie von Hand prüfen und löschen: $old"
+        old=""
+    fi
+    if [ -n "$old" ] && [ -d "$old" ] && [ ! -L "$old" ] && [ -f "$old/config.local.php" ]; then
+        if as_web cmp -s -- "$old/config.local.php" "$DATA_DIR/config.local.php"; then
             remove_old_entries "$old"
             ok "Aufräumen eines früheren Umzugs abgeschlossen ($old geleert)."
         else
             warn "In $old liegt noch eine abweichende config.local.php aus einem früheren Umzug – bitte von Hand prüfen und löschen."
         fi
     fi
-    rm -f -- "$DATA_DIR/.tcd-move-incomplete"
+    as_web rm -f -- "$DATA_DIR/.tcd-move-incomplete"
 }
 
 setup_data_dir() {
@@ -1210,8 +1229,7 @@ setup_data_dir() {
         fi
         # Fällt der Zeiger einmal weg (z. B. bei einem Update gelöscht), verweigert die Anwendung den Dienst, statt leer neu zu starten.
         if [ -d "$ROOT/data" ] && [ ! -L "$ROOT/data" ]; then
-            rm -f -- "$ROOT/data/.tcd-moved" 2>/dev/null || true
-            if printf '%s\n' "$DATA_DIR" >"$ROOT/data/.tcd-moved" 2>/dev/null; then chmod 0644 -- "$ROOT/data/.tcd-moved" 2>/dev/null || true; fi
+            write_marker "$ROOT/data/.tcd-moved" "$DATA_DIR"
         fi
         finish_interrupted_move
     fi
@@ -1567,7 +1585,7 @@ http_checks() {
         probe="$ROOT/$rel/$token.txt"
         if [ ! -d "$ROOT/$rel" ]; then continue; fi
         TMP_FILES+=("$probe")
-        if ! ( umask 022; printf 'installer-probe\n' >"$probe" ) 2>/dev/null; then continue; fi
+        if ! ( umask 022; set -C; printf 'installer-probe\n' >"$probe" ) 2>/dev/null; then continue; fi
         code=$(http_code "$SITE_URL/$rel/$token.txt" follow)
         rm -f -- "$probe"
         if [ "$code" = 200 ]; then
