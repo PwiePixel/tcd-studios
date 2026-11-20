@@ -70,74 +70,49 @@ Privatadresse. Die echten Daten des Kunden bleiben intern (nur der Kunde selbst 
 
 ## Installation mit installer.sh (empfohlen)
 
-**Code per Git auf den Server holen** (privates Repository → am besten mit einem *Deploy key*, nur Lesen):
+**1. Code per Git holen** (privates Repository → Personal Access Token mit „Contents: Read“ als Passwort):
 
 ```bash
-ssh-keygen -t ed25519 -f ~/.ssh/tcd_deploy -N ""      # öffentlichen Teil (~/.ssh/tcd_deploy.pub) bei GitHub eintragen:
-                                                        # Repository → Settings → Deploy keys → Add deploy key (ohne Schreibrecht)
-GIT_SSH_COMMAND="ssh -i ~/.ssh/tcd_deploy" git clone git@github.com:PwiePixel/tcd-studios.git /var/www/tcd-studio.de
-cd /var/www/tcd-studio.de && git config core.sshCommand "ssh -i ~/.ssh/tcd_deploy"
+git clone https://github.com/PwiePixel/tcd-studios.git /var/www/tcd-studio.de
+cd /var/www/tcd-studio.de && git config credential.helper store
+```
+
+**2. Installer starten** (als root):
+
+```bash
 bash installer.sh
 ```
 
-Updates: `cd /var/www/tcd-studio.de && git pull` (der Installer muss danach nicht erneut laufen). `sitemap.xml`, die Seiten in `legal/`,
-`app/data-dir.local`, `.htaccess` und `data/` sind nicht im Git bzw. werden ignoriert – `git pull` kollidiert deshalb nicht mit den
-Dateien, die die Website selbst schreibt. Der Ordner `.git/` liegt im Webroot: die `.htaccess`-Regel des Installers sperrt ihn (Apache),
-bei nginx die angezeigte Regel `location ^~ /.git` eintragen; `bash installer.sh --check` prüft das.
+Der Installer macht nur die **Grundeinrichtung** – alles andere wird danach im Admin-Panel eingestellt, und er verschickt **keine E-Mails**:
 
-Per SSH im Webroot (als der Benutzer, unter dem PHP läuft, oder als root):
+- **Server:** prüft PHP und installiert fehlende Pakete per apt (Apache, PHP mit Erweiterungen, cloudflared).
+- **Datenverzeichnis** außerhalb des Webroots (z. B. `../tcd-studio-data`, Pfad in `app/data-dir.local`), Rechte für den Webserver-Benutzer,
+  Datenbank und Datenschlüssel. Eine bestehende Installation in `data/` wird auf Wunsch sicher dorthin verschoben.
+- **Cloudflare-Tunnel:** fragt nach einem Cloudflare-Token (verdeckt, oder `--cf-token-file`, oder Umgebungsvariable `TCD_CF_TOKEN`).
+  - *API-Token (empfohlen):* Cloudflare → My Profile → API Tokens → Create Token → Custom token mit **Account › Cloudflare Tunnel › Edit**,
+    **Zone › DNS › Edit**, **Zone › Zone › Read** (Zone = deine Domain). Der Installer legt dann den Tunnel an, trägt die Routen
+    `domain` und `www.domain` → Apache ein und stellt die DNS-Einträge (A/AAAA/CNAME) auf den Tunnel um – nach Rückfrage, MX- und
+    TXT-Einträge der Mail bleiben unberührt.
+  - *Tunnel-Token* (Zero Trust → Networks → Tunnels): der Tunnel wird nur gestartet; die Hostnamen trägst du im Dashboard ein.
+  Der Tunnel läuft als Dienst `cloudflared-tcd` (Token in `/etc/cloudflared/tcd-tunnel.env`, nur root). Apache lauscht danach nur noch
+  auf `127.0.0.1:80` (Sicherung `ports.conf.tcd-backup`), die echte Besucher-IP kommt über `CF-Connecting-IP` (mod_remoteip), und
+  `trust_forwarded_proto` ist an. HTTPS übernimmt Cloudflare.
+  Ohne Token (oder `--no-tunnel`) bleibt Apache öffentlich, und der Installer holt ein Let's-Encrypt-Zertifikat, sobald die Domain auf den Server zeigt.
+- **Apache-Seite** (`/etc/apache2/sites-available/<domain>.conf`, `AllowOverride All`, Upload-Grenzen), täglicher **Wartungs-Cronjob**,
+  Schutzregeln (`installer.sh`, `.git/`), Abschlusstest über HTTP.
+- Am Ende: **Link und Setup-Token für das Admin-Konto** (`/admin/setup.php`).
 
-```bash
-bash installer.sh            # geführt, mit Rückfragen
-bash installer.sh --check    # nur prüfen, nichts verändern (auch später: Zugriffsschutz, System checks)
-bash installer.sh --help     # alle Optionen, auch für den unbeaufsichtigten Betrieb (--yes)
-```
+**3. Im Admin-Panel einrichten:** Admin-Konto anlegen → Account → Zwei-Faktor-Anmeldung → **Settings**: Website-Adresse, E-Mail-Adressen,
+**Mailserver (SMTP)** deines externen Mail-Anbieters (mit „Verbindung testen“, das keine Mail verschickt) → **Identity vault**:
+Schlüsselpaar im Browser erzeugen, Archiv (Verzeichnis oder S3) festlegen und testen.
 
-Der Installer erledigt die Schritte 1, 3 und 5 unten (und Teile von 4) und kann **gefahrlos erneut gestartet** werden: er ergänzt nur,
-was fehlt, ersetzt nie den Datenschlüssel, ein bestehendes Admin-Konto, einen gespeicherten Tresor-Schlüssel oder ein Archiv, in dem
-schon Ausweisdateien liegen. Bevor er etwas ändert, zeigt er eine Zusammenfassung; bei „n“ bleibt alles unverändert.
+**Updates:** `cd /var/www/tcd-studio.de && git pull` (der Installer muss nicht erneut laufen). `sitemap.xml`, `legal/`, `app/data-dir.local`,
+`.htaccess` und `data/` sind nicht im Git bzw. ignoriert. Kann gefahrlos erneut gestartet werden: der Installer ergänzt nur, was fehlt.
+Prüfen ohne Änderungen: `bash installer.sh --check`. Alle Optionen: `bash installer.sh --help`. Protokoll (ohne Geheimnisse): `~/tcd-installer.log`.
 
-- **Server (als root auf Debian/Ubuntu):** installiert fehlende Pakete per apt (Apache, PHP mit allen Erweiterungen, certbot), legt die
-  Apache-Seite `/etc/apache2/sites-available/<domain>.conf` an (DocumentRoot = Webroot, `AllowOverride All`, Upload-Grenzen), aktiviert
-  sie samt `rewrite`/`headers` und holt das HTTPS-Zertifikat von Let's Encrypt, sobald die Domain per DNS auf den Server zeigt
-  (sonst einfach später erneut starten). Abschalten: `--no-packages`, `--no-webserver`, `--no-https`.
-- **Prüft** PHP-Version und Erweiterungen (pdo_sqlite, gd mit JPEG, mbstring, openssl, sodium …), `mail()` und den Webserver.
-  Hinweis: geprüft wird das PHP der Kommandozeile; das des Webservers kann abweichen (danach Admin → Settings → System checks).
-- **Als root** läuft jeder PHP-Aufruf als Webserver-Benutzer (z. B. `www-data`, automatisch erkannt oder `--web-user`), nie als root.
-  Datenverzeichnis, Archiv, `legal/`, die `legal-notice-*`-Ordner und `sitemap.xml` gehören danach diesem Benutzer – das Webroot-Verzeichnis
-  selbst und die übrigen Dateien der Website **nicht** (PHP kann `index.html`, `.htaccess` usw. also nicht verändern).
-  Als normaler Benutzer (Shared-Hosting) wird angenommen, dass PHP unter demselben Benutzer läuft; sonst `--web-group GRUPPE`.
-- **Datenverzeichnis:** schlägt einen Ordner **außerhalb des Webroots** vor (z. B. `../tcd-studio-data`; nur neue oder leere Ordner werden
-  angenommen) und schreibt den Pfad in `app/data-dir.local`. So finden Webserver, Cronjob und Kommandozeile die Daten ohne weitere
-  Serverkonfiguration (die Umgebungsvariable `TCD_DATA_DIR` hat weiterhin Vorrang). In `data/` bleibt die Markierung `data/.tcd-moved`.
-  **Sicherheitsnetz:** Fehlt das Verzeichnis aus `app/data-dir.local` (Speichermedium nicht eingehängt) oder fehlt der Zeiger, obwohl
-  `data/.tcd-moved` existiert (z. B. bei einem Update gelöscht), verweigert die Anwendung den Dienst (Fehler 500), statt still eine leere
-  Installation mit neuem Schlüssel anzulegen. Abhilfe: Speichermedium einhängen bzw. den Pfad wieder in `app/data-dir.local` schreiben.
-  Wer Updates per `rsync --delete` o. Ä. einspielt, muss `app/data-dir.local` ausnehmen.
-- **Umzug:** Liegt eine bestehende Installation in `data/` im Webroot, bietet der Installer an, sie nach außen zu verschieben (unbeaufsichtigt:
-  `--data-dir PFAD`). Ablauf: altes Verzeichnis schreibschützen (die Website ist kurz nur lesbar), alles kopieren und vergleichen, Zeiger
-  umstellen, alte Kopie löschen. Bricht der Umzug ab, bleibt das Original unverändert; ein erneuter Start setzt ihn fort. In den Webroot
-  zurück wird nie verschoben.
-- **Anwendung:** Datenbank, Datenschlüssel, `site_url`, Postfach-Adressen, Proxy-Einstellung (`--behind-proxy` / `--no-proxy`).
-- **Admin-Konto** (Passwort verdeckt eingeben, aus Datei oder Umgebungsvariable, oder zufällig erzeugen – dann wird es direkt nach dem
-  Anlegen einmal angezeigt; es wird nie protokolliert). Geheimnisse aus Umgebungsvariablen werden sofort aus der Umgebung entfernt.
-- **Archiv:** Verzeichnis (außerhalb des Webroots, neu oder leer; Hinweis, wenn es auf demselben Dateisystem wie die Website liegt) oder S3
-  (nur `https://`; Zugangsdaten verdeckt oder über `TCD_S3_ACCESS_KEY`/`TCD_S3_SECRET_KEY`). Danach läuft automatisch der Archiv-Test.
-  Liegen im bisherigen Archiv schon Ausweisdateien, verweigert der Installer einen Wechsel (sonst wären sie unauffindbar).
-- **Tresor-Schlüssel:** empfohlen „später im Browser“ (Vault-Seite). Alternativ öffentlichen Schlüssel aus Datei übernehmen oder hier erzeugen:
-  dann liegt der private Schlüssel kurz in `~/tcd-vault-key/` (nur für root bzw. den aufrufenden Benutzer lesbar) – herunterladen,
-  „GESICHERT“ eintippen, der Installer löscht ihn. Unbeaufsichtigt bleibt er liegen und der Installer meldet das als offenes Problem.
-- **Cronjob** für `tools/maintenance.php` (täglich; als root in der crontab des Webserver-Benutzers; je Website ein eigener Eintrag).
-  Ohne `crontab` wird die Zeile zum Eintragen im Hosting-Panel angezeigt.
-- **Schutz:** Regel in der `.htaccess` des Webroots, die `installer.sh` sperrt; bei nginx/Caddy werden die nötigen Sperr-Regeln angezeigt.
-  Abschlusstest über HTTP: Startseite, Portal, Admin – und dass `app/`, `tools/`, `backend/`, `docs/`, ggf. `data/` und `installer.sh`
-  **nicht** abrufbar sind (Testdateien werden sofort wieder gelöscht).
-- **Abschlussbericht** mit offenen Punkten (Postfächer, Zwei-Faktor, Backups, privater Schlüssel …). Protokoll ohne Passwörter:
-  `~/tcd-installer.log`. Exit-Code 0 = alles erledigt, 3 = fertig mit offenen Problemen, 1 = Abbruch (nichts Unfertiges), 130 = abgebrochen.
-
-Was der Installer **nicht** kann: Postfächer und DNS/HTTPS einrichten, Zwei-Faktor-Anmeldung aktivieren, den privaten Schlüssel für dich
-aufbewahren, die Rechtstexte prüfen. **Sicherung:** das Datenverzeichnis (Pfad steht in `app/data-dir.local`) vollständig sichern –
-Datenbank und `config.local.php` immer zusammen. Ohne SSH-Zugang gilt der manuelle Weg:
+**Sicherheitsnetz:** Fehlt das Datenverzeichnis aus `app/data-dir.local` (Laufwerk nicht eingehängt), ist es leer, oder fehlt der Zeiger,
+obwohl `data/.tcd-moved` existiert, verweigert die Anwendung den Dienst, statt still eine leere Installation mit neuem Schlüssel anzulegen.
+**Sicherung:** das Datenverzeichnis vollständig (Datenbank und `config.local.php` immer zusammen); den privaten Tresor-Schlüssel getrennt und offline.
 
 ## Erste Inbetriebnahme (manuell)
 

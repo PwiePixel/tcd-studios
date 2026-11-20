@@ -65,9 +65,9 @@ Voraussetzungen des Hostings: Apache (oder ähnlich) mit **PHP ≥ 7.4**, Erweit
 bash installer.sh
 ```
 
-Er prüft den Server, legt das Datenverzeichnis (am besten außerhalb des Webroots), Datenbank, Datenschlüssel, das erste
-Admin-Konto, den Ausweis-Tresor (Schlüssel + Archiv mit Test) und den Wartungs-Cronjob an und gibt am Ende eine Checkliste aus.
-`bash installer.sh --check` prüft nur; `bash installer.sh --help` zeigt alle Optionen (auch für den unbeaufsichtigten Betrieb).
+Er installiert fehlende Pakete, legt Datenverzeichnis (außerhalb des Webroots), Datenbank und Apache-Seite an und veröffentlicht die
+Website über einen **Cloudflare-Tunnel** (fragt nach dem Token). Admin-Konto, E-Mail-Adressen, Mailserver (SMTP), Ausweis-Tresor und
+Archiv werden danach im **Admin-Panel** eingestellt. `bash installer.sh --check` prüft nur; `bash installer.sh --help` zeigt alle Optionen.
 Ohne SSH: `/admin/setup.php` aufrufen (Details in [docs/BETRIEB.md](docs/BETRIEB.md)).
 
 Lokal ausprobieren:

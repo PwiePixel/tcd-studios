@@ -8,19 +8,17 @@
 #       bash installer.sh --help       # alle Optionen
 #
 #  Was der Installer macht (er kann gefahrlos erneut gestartet werden und ergänzt nur, was fehlt):
-#    1. Server prüfen (PHP-Version, Erweiterungen, E-Mail-Versand, Webserver)
-#    2. Datenverzeichnis anlegen – am besten AUSSERHALB des Webroots – bzw. eine bestehende Installation dorthin verschieben
-#    3. Rechte für den Webserver-Benutzer setzen
-#    4. Datenbank + Datenschlüssel anlegen, Einstellungen (Adresse, Postfächer) schreiben
-#    5. ersten Admin-Account anlegen
-#    6. Ausweis-Tresor: Archiv (Verzeichnis oder S3) mit Test, öffentlicher Schlüssel
-#    7. täglichen Wartungs-Cronjob, Zugriffsschutz, Abschlusstest und Checkliste
+#    1. Server prüfen, fehlende Pakete installieren (Apache, PHP, cloudflared)
+#    2. Datenverzeichnis anlegen – AUSSERHALB des Webroots – bzw. eine bestehende Installation dorthin verschieben
+#    3. Rechte für den Webserver-Benutzer setzen, Datenbank und Datenschlüssel anlegen
+#    4. Apache-Seite einrichten und die Website über einen Cloudflare-Tunnel veröffentlichen (fragt nach dem Cloudflare-Token)
+#    5. täglichen Wartungs-Cronjob, Zugriffsschutz, Abschlusstest – und den Link zur Einrichtung des Admin-Kontos ausgeben
 #
-#  Was der Installer NICHT kann: Postfächer anlegen, DNS/HTTPS einrichten, Zwei-Faktor-Anmeldung aktivieren,
-#  den privaten Tresor-Schlüssel für dich aufbewahren. Diese Punkte stehen am Ende in der Checkliste.
+#  Alles Weitere (Admin-Konto, E-Mail-Adressen und externer Mailserver/SMTP, Ausweis-Tresor, Archiv) wird danach im
+#  Admin-Panel eingestellt. Der Installer verschickt KEINE E-Mails.
 #
-#  Sicherheit: Als root läuft jeder PHP-Aufruf als Webserver-Benutzer (nie als root). Geheimnisse (Passwörter, S3-Schlüssel)
-#  werden nie als Programmargument übergeben, nie vererbt und nie ins Protokoll geschrieben.
+#  Sicherheit: Als root läuft jeder PHP-Aufruf als Webserver-Benutzer (nie als root). Der Cloudflare-Token wird nie als
+#  Programmargument übergeben, nie vererbt und nie ins Protokoll geschrieben.
 # =====================================================================================================================
 
 if [ -z "${BASH_VERSION:-}" ] || [ "${BASH_VERSINFO[0]:-0}" -lt 4 ]; then
@@ -31,7 +29,7 @@ fi
 set -Eeuo pipefail
 umask 027
 
-INSTALLER_VERSION="1.1"
+INSTALLER_VERSION="2.0"
 
 # ------------------------------------------------------------------------------------------------------------------
 #  Ausgabe und Protokoll
@@ -98,7 +96,7 @@ trap cleanup EXIT
 # ------------------------------------------------------------------------------------------------------------------
 usage() {
     cat <<'EOF'
-installer.sh – richtet tcd-studio.de auf diesem Server ein.
+installer.sh – richtet tcd-studio.de auf diesem Server ein (Grundeinrichtung; alles Weitere im Admin-Panel).
 
 Aufruf:   bash installer.sh [Optionen]
 
@@ -110,51 +108,39 @@ Allgemein
 
 Website
   --site-url URL          Adresse der Website, z. B. https://tcd-studio.de (Standard: bisheriger Wert)
-  --mail-domain DOMAIN    Domain der Postfächer contact@/info@/imprint@/privacy-policy@/no-reply@ (Standard: tcd-studio.de)
-  --data-dir PFAD         Datenverzeichnis (Datenbank, Schlüssel). Empfohlen: außerhalb des Webroots; ein leeres oder
-                          neues Verzeichnis. Liegt eine bestehende Installation in <Webroot>/data, wird sie dorthin
-                          VERSCHOBEN (die Website ist dabei kurz nur lesbar). Mit "inside" bleibt es bei <Webroot>/data.
+  --data-dir PFAD         Datenverzeichnis (Datenbank, Schlüssel). Standard: neben dem Webroot (außerhalb).
+                          Eine bestehende Installation in <Webroot>/data wird dorthin VERSCHOBEN. "inside" = <Webroot>/data.
   --web-user NAME         (nur als root) Benutzer, unter dem PHP läuft; Standard: automatisch (www-data, apache, nginx …)
-  --web-group NAME        als root: Gruppe des Webservers. Als normaler Benutzer: Gruppe, die Schreibrechte auf
-                          Daten, legal/ und sitemap.xml bekommt (wenn PHP unter einem anderen Benutzer läuft)
-  --behind-proxy          Die Seite läuft hinter einem TLS-Proxy/CDN, der X-Forwarded-Proto setzt
-  --no-proxy              … nicht (setzt eine frühere Proxy-Einstellung zurück)
+  --web-group NAME        als root: Gruppe des Webservers; als normaler Benutzer: Gruppe, die Schreibrechte bekommt
 
-Admin-Konto (nur wenn noch keins existiert)
-  --admin-email ADRESSE   E-Mail-Adresse des Admins
-  --admin-name NAME       Anzeigename (2–80 Zeichen)
-  --admin-password-file DATEI   Passwort aus Datei (erste Zeile). Alternativ: Umgebungsvariable TCD_ADMIN_PASSWORD
-  --generate-admin-password     zufälliges Passwort erzeugen und sofort einmalig anzeigen
-
-Ausweis-Tresor
-  --vault-later                 Schlüssel später im Admin-Bereich erzeugen (Standard; empfohlen, weil der Schlüssel dann
-                                im Browser entsteht und nie auf dem Server liegt)
-  --vault-public-key DATEI      öffentlichen Schlüssel (PEM "BEGIN PUBLIC KEY", RSA ≥ 3072 Bit) aus Datei speichern
-  --vault-generate [VERZ]       Schlüsselpaar HIER erzeugen (privater Schlüssel in VERZ, Standard ~/tcd-vault-key).
-                                Der private Schlüssel gehört offline gesichert und danach vom Server gelöscht!
-  --archive-dir PFAD            Archiv-Verzeichnis (außerhalb des Webroots, am besten eigenes Volume; neu oder leer)
-  --s3-endpoint URL --s3-bucket NAME [--s3-region R] [--s3-prefix P] [--s3-path-style true|false]
-                                S3-kompatibles Archiv (nur https://). Zugangsdaten aus den Umgebungsvariablen
-                                TCD_S3_ACCESS_KEY und TCD_S3_SECRET_KEY (nie als Argument!) – oder verdeckte Eingabe.
-  --no-archive                  Archiv jetzt nicht einrichten
+Cloudflare-Tunnel (empfohlen: die Website ist dann nur über Cloudflare erreichbar, HTTPS inklusive)
+  --cf-token-file DATEI   Cloudflare-Token aus Datei (erste Zeile). Alternativ: Umgebungsvariable TCD_CF_TOKEN
+                          oder verdeckte Eingabe. Zwei Arten werden erkannt:
+                            * API-Token (empfohlen) mit den Rechten "Account > Cloudflare Tunnel > Edit",
+                              "Zone > DNS > Edit" und "Zone > Zone > Read": der Installer legt Tunnel, Routen
+                              und DNS-Einträge selbst an.
+                            * Tunnel-Token (aus Zero Trust > Networks > Tunnels): der Tunnel wird nur gestartet,
+                              die Hostnamen trägst du im Cloudflare-Dashboard ein.
+  --tunnel-name NAME      Name des Tunnels (Standard: tcd-studio-<domain>)
+  --cf-replace-dns        bestehende A/AAAA/CNAME-Einträge der Domain ohne Rückfrage durch den Tunnel ersetzen
+  --no-tunnel             keinen Tunnel einrichten (dann HTTPS per Let's Encrypt, siehe --no-https)
+  --behind-proxy / --no-proxy   X-Forwarded-Proto vertrauen bzw. nicht (beim Tunnel automatisch an)
 
 Server (nur als root auf Debian/Ubuntu)
-  --no-packages           fehlende Pakete (PHP, Apache, certbot) NICHT automatisch per apt installieren
+  --no-packages           fehlende Pakete (PHP, Apache, cloudflared, certbot) NICHT automatisch installieren
   --no-webserver          die Apache-Seite (VirtualHost) NICHT anlegen/aktivieren
-  --no-https              kein Let's-Encrypt-Zertifikat holen
+  --no-https              ohne Tunnel: kein Let's-Encrypt-Zertifikat holen
 
 Sonstiges
   --no-cron               keinen Cronjob einrichten
   --cron-schedule "M H * * *"   Zeitplan des Wartungs-Jobs (Standard: 17 3 * * *)
-  --test-mail ADRESSE     Test-E-Mail senden
   --skip-http-check       Abschluss-Test über HTTP überspringen
   --remove-installer      installer.sh am Ende löschen
 
-Beispiel (unbeaufsichtigt; das Passwort steht in einer Datei, nicht in der Befehlszeile/History):
-  bash installer.sh --yes --admin-email me@example.org --admin-name "Max Muster" \
-      --admin-password-file ~/admin-pw.txt --data-dir /var/www/tcd-data --archive-dir /mnt/vault/tcd
+Danach im Admin-Panel einrichten: Admin-Konto (Link wird am Ende angezeigt), Settings → Website/E-Mail-Adressen/
+Mailserver (SMTP), Identity vault → Schlüssel und Archiv. Der Installer verschickt keine E-Mails.
 
-Protokoll (ohne Passwörter): ~/tcd-installer.log
+Protokoll (ohne Geheimnisse): ~/tcd-installer.log
 Exit-Codes: 0 = alles erledigt · 1 = Abbruch/Fehler · 3 = fertig, aber es gibt offene Probleme (siehe Bericht) · 130 = abgebrochen.
 EOF
 }
@@ -163,24 +149,16 @@ MODE_CHECK=0
 ASSUME_YES=0
 OPT_PHP=""
 OPT_SITE_URL=""
-OPT_MAIL_DOMAIN=""
 OPT_DATA_DIR=""
 OPT_WEB_USER=""
 OPT_WEB_GROUP=""
 OPT_PROXY=""                 # "" = nicht angegeben, 1 = ja, 0 = nein
-OPT_ADMIN_EMAIL=""
-OPT_ADMIN_NAME=""
-OPT_ADMIN_PW_FILE=""
-OPT_GEN_PW=0
-OPT_VAULT_MODE=""            # file | generate | later
-OPT_VAULT_PUBKEY=""
-OPT_VAULT_KEYDIR=""
-OPT_ARCHIVE_DIR=""
-OPT_NO_ARCHIVE=0
-OPT_S3_ENDPOINT=""; OPT_S3_BUCKET=""; OPT_S3_REGION=""; OPT_S3_PREFIX=""; OPT_S3_PATH_STYLE=""
+OPT_CF_TOKEN_FILE=""
+OPT_NO_TUNNEL=0
+OPT_CF_REPLACE_DNS=0
+OPT_TUNNEL_NAME=""
 OPT_NO_CRON=0
 OPT_CRON_SCHEDULE="17 3 * * *"
-OPT_TEST_MAIL=""
 OPT_SKIP_HTTP=0
 OPT_REMOVE_INSTALLER=0
 OPT_NO_PACKAGES=0
@@ -197,7 +175,7 @@ parse_args() {
     while [ $# -gt 0 ]; do
         arg=$1
         case $arg in
-            --check=*|--yes=*|--behind-proxy=*|--no-proxy=*|--generate-admin-password=*|--vault-later=*|--no-archive=*|--no-cron=*|--skip-http-check=*|--remove-installer=*|--no-packages=*|--no-webserver=*|--no-https=*|--help=*)
+            --check=*|--yes=*|--behind-proxy=*|--no-proxy=*|--no-tunnel=*|--cf-replace-dns=*|--no-cron=*|--skip-http-check=*|--remove-installer=*|--no-packages=*|--no-webserver=*|--no-https=*|--help=*)
                 die "Die Option ${arg%%=*} erwartet keinen Wert (siehe --help)." ;;
             --*=*) shift; set -- "${arg%%=*}" "${arg#*=}" "$@" ;;
         esac
@@ -207,31 +185,17 @@ parse_args() {
             -y|--yes) ASSUME_YES=1; shift ;;
             --php) need_val "$@"; OPT_PHP=$2; shift 2 ;;
             --site-url) need_val "$@"; OPT_SITE_URL=$2; shift 2 ;;
-            --mail-domain) need_val "$@"; OPT_MAIL_DOMAIN=$2; shift 2 ;;
             --data-dir) need_val "$@"; OPT_DATA_DIR=$2; shift 2 ;;
             --web-user) need_val "$@"; OPT_WEB_USER=$2; shift 2 ;;
             --web-group) need_val "$@"; OPT_WEB_GROUP=$2; shift 2 ;;
             --behind-proxy) OPT_PROXY=1; shift ;;
             --no-proxy) OPT_PROXY=0; shift ;;
-            --admin-email) need_val "$@"; OPT_ADMIN_EMAIL=$2; shift 2 ;;
-            --admin-name) need_val "$@"; OPT_ADMIN_NAME=$2; shift 2 ;;
-            --admin-password-file) need_val "$@"; OPT_ADMIN_PW_FILE=$2; shift 2 ;;
-            --generate-admin-password) OPT_GEN_PW=1; shift ;;
-            --vault-public-key) need_val "$@"; OPT_VAULT_MODE="file"; OPT_VAULT_PUBKEY=$2; shift 2 ;;
-            --vault-generate)
-                OPT_VAULT_MODE="generate"
-                if [ $# -ge 2 ] && [ -n "$2" ] && [ "${2#-}" = "$2" ]; then OPT_VAULT_KEYDIR=$2; shift 2; else shift; fi ;;
-            --vault-later) OPT_VAULT_MODE="later"; shift ;;
-            --archive-dir) need_val "$@"; OPT_ARCHIVE_DIR=$2; shift 2 ;;
-            --no-archive) OPT_NO_ARCHIVE=1; shift ;;
-            --s3-endpoint) need_val "$@"; OPT_S3_ENDPOINT=$2; shift 2 ;;
-            --s3-bucket) need_val "$@"; OPT_S3_BUCKET=$2; shift 2 ;;
-            --s3-region) need_val "$@"; OPT_S3_REGION=$2; shift 2 ;;
-            --s3-prefix) need_val "$@"; OPT_S3_PREFIX=$2; shift 2 ;;
-            --s3-path-style) need_val "$@"; OPT_S3_PATH_STYLE=$2; shift 2 ;;
+            --cf-token-file) need_val "$@"; OPT_CF_TOKEN_FILE=$2; shift 2 ;;
+            --no-tunnel) OPT_NO_TUNNEL=1; shift ;;
+            --cf-replace-dns) OPT_CF_REPLACE_DNS=1; shift ;;
+            --tunnel-name) need_val "$@"; OPT_TUNNEL_NAME=$2; shift 2 ;;
             --no-cron) OPT_NO_CRON=1; shift ;;
             --cron-schedule) need_val "$@"; OPT_CRON_SCHEDULE=$2; shift 2 ;;
-            --test-mail) need_val "$@"; OPT_TEST_MAIL=$2; shift 2 ;;
             --skip-http-check) OPT_SKIP_HTTP=1; shift ;;
             --remove-installer) OPT_REMOVE_INSTALLER=1; shift ;;
             --no-packages) OPT_NO_PACKAGES=1; shift ;;
@@ -240,9 +204,6 @@ parse_args() {
             *) die "Unbekannte Option: $1 (siehe --help)" ;;
         esac
     done
-    if [ -n "$OPT_ARCHIVE_DIR" ] && { [ -n "$OPT_S3_ENDPOINT" ] || [ -n "$OPT_S3_BUCKET" ]; }; then
-        die "--archive-dir und --s3-* schließen sich aus."
-    fi
 }
 
 # ------------------------------------------------------------------------------------------------------------------
@@ -460,10 +421,6 @@ hp_noenv() {       # wie hp, aber die Anwendung sucht ihr Datenverzeichnis selbs
     as_web env -u TCD_DATA_DIR "$PHP" "$HELPER" "$@"
 }
 
-hp_stateless() {   # für Prüfungen ohne Daten (Passwortregeln, Schlüssel-Fingerabdruck): leeres Wegwerf-Verzeichnis
-    as_web env "TCD_DATA_DIR=$STATELESS_DIR" "$PHP" "$HELPER" "$@"
-}
-
 hp_get() {         # hp_get "$ausgabe" schluessel -> Wert der INFO-Zeile
     printf '%s\n' "$1" | awk -F'\t' -v k="$2" '$1 == "INFO" && $2 == k { print $3; exit }' | tr -d '\000-\037\177'
 }
@@ -561,7 +518,7 @@ detect_web_user() {
 
 REQ_FAILED=0
 check_requirements() {
-    step "1/7  Server prüfen"
+    step "1/6  Server prüfen"
     say "  Installationsordner : $ROOT"
     say "  Benutzer            : $(id -un) (uid $(id -u))"
     say "  Webserver           : $WEBSERVER"
@@ -602,9 +559,8 @@ check_requirements() {
 #  2. Zustand und Einstellungen
 # ------------------------------------------------------------------------------------------------------------------
 CUR_DATA_DIR=""; CUR_SOURCE=""; CUR_PROBLEM=""; CUR_INSTALLED="no"; CUR_HAS_CONFIG="no"; CUR_ADMIN="no"; CUR_VAULT_KEY="none"
-CUR_VAULT_FP=""; CUR_SITE_URL=""; CUR_MAIL_DOMAIN=""; CUR_PROXY="false"; CUR_ARCHIVE_FILES=0
+CUR_SITE_URL=""; CUR_PROXY="false"; CUR_ARCHIVE_FILES=0
 CUR_VAULT_DRIVER="directory"; CUR_VAULT_DIR=""; CUR_VAULT_DIR_SET="no"
-CUR_S3_ENDPOINT=""; CUR_S3_BUCKET=""; CUR_S3_REGION=""; CUR_S3_PREFIX=""; CUR_S3_PATH_STYLE=""; CUR_S3_KEYS="no"
 
 read_current_state() {
     local out
@@ -619,20 +575,12 @@ read_current_state() {
     CUR_HAS_CONFIG=$(hp_get "$out" has_config)
     CUR_ADMIN=$(hp_get "$out" admin); CUR_ADMIN=${CUR_ADMIN:-no}
     CUR_VAULT_KEY=$(hp_get "$out" vault_key); CUR_VAULT_KEY=${CUR_VAULT_KEY:-none}
-    CUR_VAULT_FP=$(hp_get "$out" vault_fingerprint)
     CUR_SITE_URL=$(hp_get "$out" site_url)
-    CUR_MAIL_DOMAIN=$(hp_get "$out" mail_domain)
     CUR_PROXY=$(hp_get "$out" trust_forwarded_proto); CUR_PROXY=${CUR_PROXY:-false}
     CUR_ARCHIVE_FILES=$(hp_get "$out" archive_files); CUR_ARCHIVE_FILES=${CUR_ARCHIVE_FILES:-0}
     CUR_VAULT_DRIVER=$(hp_get "$out" vault_driver); CUR_VAULT_DRIVER=${CUR_VAULT_DRIVER:-directory}
     CUR_VAULT_DIR=$(hp_get "$out" vault_dir)
     CUR_VAULT_DIR_SET=$(hp_get "$out" vault_dir_configured); CUR_VAULT_DIR_SET=${CUR_VAULT_DIR_SET:-no}
-    CUR_S3_ENDPOINT=$(hp_get "$out" s3_endpoint)
-    CUR_S3_BUCKET=$(hp_get "$out" s3_bucket)
-    CUR_S3_REGION=$(hp_get "$out" s3_region)
-    CUR_S3_PREFIX=$(hp_get "$out" s3_prefix)
-    CUR_S3_PATH_STYLE=$(hp_get "$out" s3_path_style)
-    CUR_S3_KEYS=$(hp_get "$out" s3_keys); CUR_S3_KEYS=${CUR_S3_KEYS:-no}
 }
 
 explain_state_problem() {  # bricht bei einem kaputten Zeiger ab (nichts wird neu angelegt)
@@ -663,12 +611,11 @@ fs_id() {
 }
 
 DATA_DIR=""; DATA_INSIDE=0; MOVE_FROM=""; RESUME_MOVE=0
-SITE_URL=""; MAIL_DOMAIN=""; PROXY="false"
-ADMIN_EMAIL=""; ADMIN_NAME=""; ADMIN_PW=""; ADMIN_PW_GENERATED=0
-VAULT_MODE=""; VAULT_PUBKEY=""; VAULT_KEYDIR=""
-ARCH_MODE=""; ARCH_DIR=""; S3_ENDPOINT=""; S3_BUCKET=""; S3_REGION=""; S3_PREFIX=""; S3_PATH_STYLE=""; S3_ACCESS=""; S3_SECRET=""; S3_KEEP_KEYS=0
+SITE_URL=""; PROXY="false"
+ARCH_DIR=""
 CRON_WANTED=1
-TEST_MAIL_TO=""
+TUNNEL_MODE=""       # api | token | none | keep
+CF_TOKEN=""; CF_TUNNEL_TOKEN=""; TUNNEL_NAME=""; TUNNEL_HOSTS=""; CF_REPLACE_DNS=0
 
 # Ist PFAD als (neues) Verzeichnis zulässig? Bricht sonst ab.
 validate_new_dir() {   # validate_new_dir PFAD "Bezeichnung" ERLAUBTE_MARKIERUNG
@@ -781,295 +728,194 @@ gather_data_dir() {
 
 gather_site() {
     say ""
-    say "${C_BOLD}Website und Postfächer${C_RESET}"
+    say "${C_BOLD}Website${C_RESET}"
     local def_url=${OPT_SITE_URL:-${CUR_SITE_URL:-https://tcd-studio.de}}
     ask SITE_URL "Adresse der Website (mit https://)" "$def_url"
     SITE_URL=${SITE_URL%/}
     valid_url "$SITE_URL" || die "Ungültige Adresse der Website: $SITE_URL (erwartet: https://domain.tld)"
     case $SITE_URL in https://*) ;; *) warn "Die Website-Adresse beginnt nicht mit https:// – Ausweis-Uploads funktionieren nur über HTTPS." ;; esac
-
-    local def_dom=${OPT_MAIL_DOMAIN:-${CUR_MAIL_DOMAIN:-tcd-studio.de}}
-    ask MAIL_DOMAIN "Domain der Postfächer (contact@, info@, imprint@, privacy-policy@, no-reply@)" "$def_dom"
-    MAIL_DOMAIN=$(lower "$MAIL_DOMAIN")
-    valid_domain "$MAIL_DOMAIN" || die "Ungültige Domain für die Postfächer: $MAIL_DOMAIN"
-
-    PROXY=$CUR_PROXY
-    if [ "$OPT_PROXY" = 1 ]; then PROXY=true
-    elif [ "$OPT_PROXY" = 0 ]; then PROXY=false
-    elif [ "$ASSUME_YES" != 1 ]; then
-        local d=n
-        if [ "$CUR_PROXY" = true ]; then d=j; fi
-        if ask_yn "Läuft die Seite hinter einem Proxy/CDN, das HTTPS beendet (z. B. Cloudflare, Load-Balancer)? Nur dann j." "$d"; then PROXY=true; else PROXY=false; fi
-    fi
-
-    local host=${SITE_URL#*://}; host=${host%%[:/]*}
-    if [ "$host" != "tcd-studio.de" ] && [ "$host" != "www.tcd-studio.de" ]; then
-        note "Die Website-Adresse ist nicht tcd-studio.de: die statischen Seiten (index.html, privacy/, legal-notice/ …) enthalten weiterhin tcd-studio.de."
-        todo "Statische Seiten und backend/config.php (Kontaktformular) an die Domain $host anpassen."
-    fi
-    if [ "$MAIL_DOMAIN" != "tcd-studio.de" ]; then
-        todo "backend/config.php (Empfänger/Absender des Kontaktformulars) und das Impressum auf Adressen @$MAIL_DOMAIN umstellen."
-    fi
+    SITE_HOST=${SITE_URL#*://}; SITE_HOST=${SITE_HOST%%[:/]*}
 }
 
-gen_password() {
-    local p=""
-    if has_cmd openssl; then p=$(openssl rand -base64 48 2>/dev/null | tr -dc 'A-Za-z0-9' | cut -c1-20 || true); fi
-    if [ "${#p}" -lt 16 ]; then p=$(od -An -N64 -tx1 /dev/urandom | tr -dc 'a-f0-9' | cut -c1-24 || true); fi
-    [ "${#p}" -ge 16 ] || die "Es konnte kein Zufalls-Passwort erzeugt werden."
-    printf '%s' "$p"
+CF_TUNNEL_ENV="/etc/cloudflared/tcd-tunnel.env"
+CF_UNIT="/etc/systemd/system/cloudflared-tcd.service"
+
+cf_token_kind() {  # api | tunnel | invalid
+    local t=$1 dec
+    if [[ $t =~ ^[A-Za-z0-9_-]{30,80}$ ]]; then printf 'api'; return 0; fi
+    dec=$(printf '%s' "$t" | base64 -d 2>/dev/null | tr -d '\000' || true)
+    if [[ $dec == *'"a"'* && $dec == *'"t"'* && $dec == *'"s"'* ]]; then printf 'tunnel'; return 0; fi
+    printf 'invalid'
 }
 
-check_password_quiet() {   # prüft $ADMIN_PW mit den Regeln der Anwendung; Meldung nur bei Fehler
-    local out rc=0
-    out=$(printf '%s\n' "email=$ADMIN_EMAIL" "password=$ADMIN_PW" | hp_stateless password-check 2>&1) || rc=$?
-    if [ "$rc" -ne 0 ]; then
-        local detail
-        detail=$(hp_fail_text "$out")
-        printf '  %s\n' "${detail:-Das Passwort wird nicht akzeptiert.}" >&2
-        return 1
-    fi
-    return 0
-}
-
-gather_admin() {
-    # Geheimnisse aus der Umgebung übernehmen und sofort aus der Umgebung entfernen (nicht an Kindprozesse vererben)
-    local env_pw=$ENV_ADMIN_PW
-    ENV_ADMIN_PW=""
-    if [ "$CUR_ADMIN" = yes ]; then return 0; fi
+gather_tunnel() {
+    local env_tok=$ENV_CF_TOKEN
+    ENV_CF_TOKEN=""
     say ""
-    say "${C_BOLD}Admin-Konto${C_RESET} – Zugang zum Admin-Bereich (${SITE_URL}/admin/). Dieses Konto prüft Anträge und sieht Ausweisfotos."
-    ask ADMIN_EMAIL "E-Mail-Adresse des Admins" "${OPT_ADMIN_EMAIL:-}"
-    if [ -z "$ADMIN_EMAIL" ]; then die "Für das Admin-Konto wird eine E-Mail-Adresse gebraucht (--admin-email)."; fi
-    ADMIN_EMAIL=$(lower "$ADMIN_EMAIL")
-    valid_email "$ADMIN_EMAIL" || die "Ungültige E-Mail-Adresse: $ADMIN_EMAIL"
-    ask ADMIN_NAME "Name des Admins" "${OPT_ADMIN_NAME:-}"
-    if [[ $ADMIN_NAME == *[[:cntrl:]]* ]]; then die "Der Name enthält Steuerzeichen."; fi
-    if [ "${#ADMIN_NAME}" -lt 2 ] || [ "${#ADMIN_NAME}" -gt 80 ]; then die "Der Name muss 2 bis 80 Zeichen lang sein."; fi
-
-    if [ -n "$OPT_ADMIN_PW_FILE" ]; then
-        [ -r "$OPT_ADMIN_PW_FILE" ] || die "Die Passwort-Datei ist nicht lesbar: $OPT_ADMIN_PW_FILE"
-        IFS= read -r ADMIN_PW <"$OPT_ADMIN_PW_FILE" || true
-        ADMIN_PW=${ADMIN_PW%$'\r'}
-        if [ -z "$ADMIN_PW" ]; then die "Die Passwort-Datei ist leer."; fi
-    elif [ -n "$env_pw" ]; then
-        ADMIN_PW=$env_pw
-    elif [ "$OPT_GEN_PW" = 1 ]; then
-        ADMIN_PW=$(gen_password); ADMIN_PW_GENERATED=1
-    elif [ "$ASSUME_YES" = 1 ]; then
-        die "Im unbeaufsichtigten Modus braucht das Admin-Konto ein Passwort: --admin-password-file, TCD_ADMIN_PASSWORD oder --generate-admin-password."
-    elif ask_yn "Passwort zufällig erzeugen lassen (wird direkt nach dem Anlegen einmal angezeigt)?" n; then
-        ADMIN_PW=$(gen_password); ADMIN_PW_GENERATED=1
-    else
-        local again="" tries=0
-        while :; do
-            tries=$((tries + 1))
-            ask_secret ADMIN_PW "Passwort (mind. 10 Zeichen, Eingabe bleibt unsichtbar)"
-            ask_secret again "Passwort wiederholen"
-            if [ "$ADMIN_PW" != "$again" ]; then
-                printf '  Die Eingaben sind nicht gleich.\n' >&2
-            elif check_password_quiet; then
-                break
-            fi
-            if [ "$tries" -ge 5 ]; then die "Zu viele Fehlversuche."; fi
-        done
-        again=""
+    say "${C_BOLD}Cloudflare-Tunnel${C_RESET} – die Website wird über Cloudflare veröffentlicht (HTTPS inklusive, kein offener Port am Server)."
+    local sysd
+    sysd=$(systemctl is-system-running 2>/dev/null || true)
+    if [ "$OPT_NO_TUNNEL" = 1 ] || ! is_root || ! has_cmd systemctl || [ "$sysd" = offline ] || [ -z "$sysd" ]; then
+        TUNNEL_MODE=none
+        if [ "$OPT_NO_TUNNEL" != 1 ]; then note "Den Tunnel kann der Installer nur als root auf einem Server mit systemd einrichten – übersprungen."; fi
+        PROXY=$CUR_PROXY
+        if [ "$OPT_PROXY" = 1 ]; then PROXY=true; elif [ "$OPT_PROXY" = 0 ]; then PROXY=false; fi
+        return 0
     fi
-    check_password_quiet || die "Das Passwort wird nicht akzeptiert."
-}
-
-gather_archive() {
-    say ""
-    say "${C_BOLD}Archiv für Ausweisfotos${C_RESET} – nach der Prüfung liegen die (verschlüsselten) Fotos nur noch hier, bis der Kunde den Dienst beendet."
-    say "  Die Datenschutzerklärung verspricht ein getrenntes, geschütztes Speichersystem: am besten ein eigenes Volume oder ein S3-Bucket."
-    local env_ak=$ENV_S3_AK env_sk=$ENV_S3_SK
-    ENV_S3_AK=""; ENV_S3_SK=""
-
-    local configured=0
-    if [ "$CUR_VAULT_DRIVER" = s3 ] || [ "$CUR_VAULT_DIR_SET" = yes ] || [ "$CUR_ARCHIVE_FILES" -gt 0 ]; then configured=1; fi
-
-    if [ "$OPT_NO_ARCHIVE" = 1 ]; then
-        ARCH_MODE=skip
-    elif [ -n "$OPT_S3_ENDPOINT" ] || [ -n "$OPT_S3_BUCKET" ]; then
-        ARCH_MODE=s3
-    elif [ -n "$OPT_ARCHIVE_DIR" ]; then
-        ARCH_MODE=dir
-    elif [ "$configured" = 1 ]; then
-        ARCH_MODE=keep
-        if [ "$CUR_VAULT_DRIVER" = s3 ]; then say "  Das Archiv ist bereits eingerichtet (S3 $CUR_S3_ENDPOINT / $CUR_S3_BUCKET) – es wird nur erneut getestet."
-        else say "  Das Archiv ist bereits eingerichtet ($CUR_VAULT_DIR) – es wird nur erneut getestet."; fi
-    elif [ "$ASSUME_YES" = 1 ]; then
-        ARCH_MODE=dir
+    if [ -f "$CF_TUNNEL_ENV" ] && [ -z "$OPT_CF_TOKEN_FILE" ] && [ -z "$env_tok" ]; then
+        TUNNEL_MODE=keep
+        say "  Ein Tunnel ist bereits eingerichtet ($CF_TUNNEL_ENV) – er wird nur (neu) gestartet."
     else
-        say "    1) Verzeichnis (außerhalb des Webroots, möglichst eigenes Volume)"
-        say "    2) S3-kompatibler Speicher (AWS S3, Hetzner, Backblaze, Wasabi, MinIO …)"
-        say "    3) später einrichten"
-        local choice=""
-        ask_choice choice "Auswahl" 1 1 2 3
-        case $choice in 2) ARCH_MODE=s3 ;; 3) ARCH_MODE=skip ;; *) ARCH_MODE=dir ;; esac
-    fi
-
-    # Ein Archiv mit Ausweisdateien wird nie stillschweigend umgehängt: die Dateien wären dann unauffindbar.
-    if [ "$CUR_ARCHIVE_FILES" -gt 0 ] && { [ "$ARCH_MODE" = dir ] || [ "$ARCH_MODE" = s3 ]; }; then
-        local same=0
-        if [ "$ARCH_MODE" = dir ] && [ "$CUR_VAULT_DRIVER" = directory ] && [ -n "$OPT_ARCHIVE_DIR" ] && [ "$(physical_path "$OPT_ARCHIVE_DIR")" = "$(physical_path "$CUR_VAULT_DIR")" ]; then same=1; fi
-        if [ "$ARCH_MODE" = s3 ] && [ "$CUR_VAULT_DRIVER" = s3 ] && [ "${OPT_S3_ENDPOINT%/}" = "${CUR_S3_ENDPOINT%/}" ] && [ "$OPT_S3_BUCKET" = "$CUR_S3_BUCKET" ] && { [ -z "$OPT_S3_PREFIX" ] || [ "$OPT_S3_PREFIX" = "$CUR_S3_PREFIX" ]; }; then same=1; fi
-        if [ "$same" = 0 ]; then
-            die "Im bisherigen Archiv liegen $CUR_ARCHIVE_FILES Ausweisdatei(en). Ein Wechsel des Archivs ist nur von Hand möglich (Dateien kopieren, dann Einstellung ändern) – sonst wären die Dateien unauffindbar und würden bei einer Löschung nicht mitgelöscht. Nichts wurde verändert."
+        local tok=""
+        if [ -n "$OPT_CF_TOKEN_FILE" ]; then
+            [ -r "$OPT_CF_TOKEN_FILE" ] || die "Die Token-Datei ist nicht lesbar: $OPT_CF_TOKEN_FILE"
+            IFS= read -r tok <"$OPT_CF_TOKEN_FILE" || true
+        elif [ -n "$env_tok" ]; then
+            tok=$env_tok
+        elif [ "$ASSUME_YES" = 1 ]; then
+            tok=""
+        else
+            say "  Am einfachsten: ein API-Token (Cloudflare → My Profile → API Tokens → Create Token → \"Custom token\") mit den Rechten"
+            say "  Account › Cloudflare Tunnel › Edit, Zone › DNS › Edit, Zone › Zone › Read (Zone: deine Domain). Dann legt der Installer alles an."
+            say "  Alternativ ein Tunnel-Token aus Zero Trust → Networks → Tunnels. Leer lassen = ohne Tunnel."
+            ask_secret tok "Cloudflare-Token (Eingabe bleibt unsichtbar)"
         fi
-    fi
-
-    case $ARCH_MODE in
-        dir)
-            local def=${OPT_ARCHIVE_DIR:-}
-            if [ -z "$def" ]; then
-                local base
-                if [ "$DATA_INSIDE" = 1 ]; then base=$(dirname -- "$ROOT_REAL"); else base=$(dirname -- "$DATA_DIR"); fi
-                if [ "$base" != / ] && [ -w "$base" ]; then def="$base/tcd-vault-archive"; fi
-            fi
-            if [ -z "$def" ] && [ "$ASSUME_YES" = 1 ]; then
-                ARCH_MODE=skip
-                warn "Für das Archiv gibt es keinen beschreibbaren Ort außerhalb des Webroots – es wurde NICHT eingerichtet (mit --archive-dir PFAD oder --s3-… erneut starten)."
-                return 0
-            fi
-            ask ARCH_DIR "Archiv-Verzeichnis (neu oder leer)" "$def"
-            if [ -z "$ARCH_DIR" ]; then ARCH_MODE=skip; return 0; fi
-            check_path_text "$ARCH_DIR" "Archiv"
-            ARCH_DIR=$(physical_path "$ARCH_DIR")
-            if path_inside "$ARCH_DIR" "$ROOT_REAL"; then die "Das Archiv darf nicht im Webroot liegen: $ARCH_DIR"; fi
-            if [ "$ARCH_DIR" = "$DATA_DIR" ]; then die "Das Archiv muss ein eigenes Verzeichnis sein (nicht das Datenverzeichnis)."; fi
-            if [ -n "$MOVE_FROM" ] && path_inside "$ARCH_DIR" "$MOVE_FROM"; then die "Das Archiv darf nicht im bisherigen Datenverzeichnis liegen."; fi
-            validate_new_dir "$ARCH_DIR" "Das Archiv-Verzeichnis" ".tcd-vault"
-            if path_inside "$ARCH_DIR" "$DATA_DIR"; then
-                note "Das Archiv liegt innerhalb des Datenverzeichnisses – das ist KEIN getrenntes Speichersystem."
-                todo "Archiv auf ein getrenntes Speichersystem legen (eigenes Volume oder S3) oder die Datenschutzerklärung anpassen."
-            fi
-            ;;
-        s3)
-            local keep_defaults=0
-            if [ "$CUR_VAULT_DRIVER" = s3 ]; then keep_defaults=1; fi
-            if [ "$keep_defaults" = 1 ]; then
-                S3_ENDPOINT=${OPT_S3_ENDPOINT:-$CUR_S3_ENDPOINT}; S3_BUCKET=${OPT_S3_BUCKET:-$CUR_S3_BUCKET}
-                S3_REGION=${OPT_S3_REGION:-$CUR_S3_REGION}; S3_PREFIX=${OPT_S3_PREFIX:-$CUR_S3_PREFIX}; S3_PATH_STYLE=${OPT_S3_PATH_STYLE:-$CUR_S3_PATH_STYLE}
-            else
-                S3_ENDPOINT=$OPT_S3_ENDPOINT; S3_BUCKET=$OPT_S3_BUCKET; S3_REGION=$OPT_S3_REGION; S3_PREFIX=$OPT_S3_PREFIX; S3_PATH_STYLE=$OPT_S3_PATH_STYLE
-            fi
-            S3_REGION=${S3_REGION:-eu-central-1}
-            S3_PREFIX=${S3_PREFIX:-tcd-id/}
-            S3_PATH_STYLE=${S3_PATH_STYLE:-true}
-            ask S3_ENDPOINT "S3-Endpunkt (https://…)" "$S3_ENDPOINT"
-            ask S3_BUCKET "Bucket-Name" "$S3_BUCKET"
-            ask S3_REGION "Region" "$S3_REGION"
-            ask S3_PREFIX "Präfix im Bucket" "$S3_PREFIX"
-            ask_choice S3_PATH_STYLE "Path-Style-Adressierung (true/false)" "$S3_PATH_STYLE" true false
-            S3_ENDPOINT=${S3_ENDPOINT%/}
-            if [ -z "$S3_ENDPOINT" ] || [ -z "$S3_BUCKET" ]; then die "S3 braucht mindestens Endpunkt und Bucket."; fi
-            valid_url "$S3_ENDPOINT" || die "Ungültiger S3-Endpunkt: $S3_ENDPOINT"
-            case $S3_ENDPOINT in
-                https://*) ;;
-                http://127.0.0.1|http://127.0.0.1:*|http://localhost|http://localhost:*) note "S3-Endpunkt ohne https (nur zum lokalen Testen)." ;;
-                *) die "Der S3-Endpunkt muss mit https:// beginnen (die Anwendung lehnt unverschlüsselte Verbindungen ab)." ;;
+        tok=$(trim "${tok%$'\r'}")
+        if [ -z "$tok" ]; then
+            TUNNEL_MODE=none
+            if [ "$ASSUME_YES" = 1 ]; then note "Kein Cloudflare-Token (--cf-token-file oder TCD_CF_TOKEN) – ohne Tunnel."; fi
+        else
+            case $(cf_token_kind "$tok") in
+                api) TUNNEL_MODE=api; CF_TOKEN=$tok ;;
+                tunnel) TUNNEL_MODE=token; CF_TUNNEL_TOKEN=$tok ;;
+                *) die "Das ist weder ein Cloudflare-API-Token noch ein Tunnel-Token." ;;
             esac
-            case $S3_PATH_STYLE in true|false) ;; *) die "--s3-path-style muss true oder false sein." ;; esac
-            if ! [[ $S3_BUCKET =~ ^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$ ]] || [[ $S3_BUCKET == *..* ]]; then
-                die "Ungültiger Bucket-Name: $S3_BUCKET (3–63 Zeichen: Kleinbuchstaben, Ziffern, Punkt, Bindestrich)"
-            fi
-            [[ $S3_REGION =~ ^[A-Za-z0-9._-]{1,128}$ ]] || die "Ungültige Region: $S3_REGION"
-            if [ -n "$S3_PREFIX" ]; then
-                if ! [[ $S3_PREFIX =~ ^[A-Za-z0-9._-]+(/[A-Za-z0-9._-]+)*/?$ ]] || [[ $S3_PREFIX =~ (^|/)\.\.?(/|$) ]]; then
-                    die "Ungültiges Präfix: $S3_PREFIX (z. B. tcd-id/ – ohne führenden Schrägstrich, ohne ..)"
-                fi
-            fi
-            S3_ACCESS=$env_ak; S3_SECRET=$env_sk
-            if [ -z "$S3_ACCESS" ] && [ -z "$S3_SECRET" ] && [ "$CUR_VAULT_DRIVER" = s3 ] && [ "$CUR_S3_KEYS" = yes ]; then
-                if ask_yn "Die gespeicherten S3-Zugangsdaten behalten?" j; then S3_KEEP_KEYS=1; fi
-            fi
-            if [ "$S3_KEEP_KEYS" != 1 ]; then
-                if [ -z "$S3_ACCESS" ] || [ -z "$S3_SECRET" ]; then
-                    if [ "$ASSUME_YES" = 1 ]; then die "S3-Zugangsdaten fehlen: Umgebungsvariablen TCD_S3_ACCESS_KEY und TCD_S3_SECRET_KEY setzen."; fi
-                    if [ -z "$S3_ACCESS" ]; then ask_secret S3_ACCESS "S3 Access Key (Eingabe bleibt unsichtbar)"; fi
-                    if [ -z "$S3_SECRET" ]; then ask_secret S3_SECRET "S3 Secret Key (Eingabe bleibt unsichtbar)"; fi
-                fi
-                S3_ACCESS=$(trim "$S3_ACCESS"); S3_SECRET=$(trim "$S3_SECRET")
-                if ! [[ $S3_ACCESS =~ ^[!-~]{1,256}$ ]] || ! [[ $S3_SECRET =~ ^[!-~]{1,256}$ ]]; then
-                    die "Die S3-Zugangsdaten fehlen oder enthalten Leer-/Steuerzeichen."
-                fi
-            fi
-            ;;
+        fi
+        tok=""
+    fi
+
+    if [ "$TUNNEL_MODE" = api ]; then
+        TUNNEL_NAME=${OPT_TUNNEL_NAME:-tcd-studio-${SITE_HOST//./-}}
+        [[ $TUNNEL_NAME =~ ^[A-Za-z0-9._-]{1,60}$ ]] || die "Ungültiger Tunnel-Name: $TUNNEL_NAME"
+        TUNNEL_HOSTS=$SITE_HOST
+        if [[ $SITE_HOST != www.* ]]; then TUNNEL_HOSTS="$SITE_HOST,www.$SITE_HOST"; fi
+        say "  Prüfe den Token bei Cloudflare …"
+        local out rc=0
+        out=$(cf_run inspect) || rc=$?
+        if [ "$rc" -ne 0 ]; then die "Cloudflare: $(hp_fail_text "$out")"; fi
+        ok "Token gültig, Zone $(printf '%s\n' "$out" | awk -F'\t' '$1=="OK" && $2=="zone" {print $3}')."
+        local line h st
+        CF_REPLACE_DNS=$OPT_CF_REPLACE_DNS
+        while IFS=$'\t' read -r st h line; do
+            [ "$st" = INFO ] || continue
+            case $h in dns:*) ;; *) continue ;; esac
+            h=${h#dns:}
+            case $line in
+                foreign*)
+                    say "  DNS ${C_BOLD}$h${C_RESET} zeigt bisher auf: ${line#foreign }"
+                    if [ "$CF_REPLACE_DNS" != 1 ]; then
+                        if [ "$ASSUME_YES" = 1 ]; then
+                            warn "DNS-Einträge von $h werden NICHT ersetzt (dafür --cf-replace-dns). Die Website ist dann noch nicht über den Tunnel erreichbar."
+                        elif ask_yn "Diese Einträge löschen und $h auf den Tunnel umstellen? (E-Mail-Einträge wie MX bleiben unberührt)" j; then
+                            CF_REPLACE_DNS=1
+                        fi
+                    fi ;;
+                ours*) say "  DNS $h zeigt bereits auf den Tunnel." ;;
+                *) say "  DNS $h: noch kein Eintrag – wird angelegt." ;;
+            esac
+        done <<<"$out"
+    fi
+
+    case $TUNNEL_MODE in
+        api|token|keep) PROXY=true ;;
+        *) PROXY=$CUR_PROXY ;;
     esac
+    if [ "$OPT_PROXY" = 1 ]; then PROXY=true; elif [ "$OPT_PROXY" = 0 ]; then PROXY=false; fi
 }
 
-gather_vault() {
-    say ""
-    say "${C_BOLD}Ausweis-Tresor${C_RESET} – Ausweisfotos werden mit einem ÖFFENTLICHEN Schlüssel verschlüsselt; der PRIVATE Schlüssel gehört nie auf einen Server."
-    local out fp
-    if [ "$CUR_VAULT_KEY" = ok ]; then
-        VAULT_MODE=keep
-        say "  Es ist bereits ein Tresor-Schlüssel gespeichert (Fingerabdruck $CUR_VAULT_FP) – er bleibt unverändert."
-        if [ "$OPT_VAULT_MODE" = file ]; then
-            out=$(hp_stateless vault-key fingerprint <"$OPT_VAULT_PUBKEY" 2>&1) || true
-            fp=$(printf '%s\n' "$out" | awk -F'\t' '$1 == "OK" { print $3; exit }')
-            if [ "$fp" != "$CUR_VAULT_FP" ]; then
-                bad "--vault-public-key wurde NICHT übernommen: es ist bereits ein anderer Schlüssel gespeichert. Ein Austausch geht nur im Admin-Bereich (Settings → Identity vault, mit Passwort); ältere Fotos brauchen weiterhin den alten privaten Schlüssel."
-            fi
-        elif [ "$OPT_VAULT_MODE" = generate ]; then
-            warn "--vault-generate wurde ignoriert: es ist bereits ein Tresor-Schlüssel gespeichert."
-        fi
-        local leftover="${OPT_VAULT_KEYDIR:-${HOME:-/root}/tcd-vault-key}/id-vault-private-key.pem"
-        if [ -f "$leftover" ]; then bad "Der private Tresor-Schlüssel liegt noch auf dem Server: $leftover – herunterladen, sichern, dann löschen:  shred -u $(shq "$leftover")"; fi
-        return 0
-    fi
-    if [ "$CUR_VAULT_KEY" = invalid ]; then
-        warn "Der gespeicherte Tresor-Schlüssel ist ungültig – bitte im Admin-Bereich (Settings → Identity vault) ersetzen."
-        VAULT_MODE=later
-        return 0
-    fi
+cf_run() {         # cf_run inspect|apply – Cloudflare-API (Token nur über stdin; läuft als "nobody", nicht als root/www-data)
+    local -a runner=()
+    if is_root && id -u nobody >/dev/null 2>&1; then runner=(runuser -u nobody --); fi
+    printf '%s\n' "token=$CF_TOKEN" "domain=$SITE_HOST" "hostnames=$TUNNEL_HOSTS" "tunnel_name=$TUNNEL_NAME" "service=http://127.0.0.1:80" \
+        "replace_dns=$([ "$CF_REPLACE_DNS" = 1 ] && printf yes || printf no)" \
+        | ${runner[@]+"${runner[@]}"} env -i PATH=/usr/bin:/bin ${TCD_CF_API_BASE:+"TCD_CF_API_BASE=$TCD_CF_API_BASE"} "$PHP" "$ROOT/tools/cloudflare-tunnel.php" "$1" 2>&1
+}
 
-    if [ -n "$OPT_VAULT_MODE" ]; then
-        VAULT_MODE=$OPT_VAULT_MODE; VAULT_PUBKEY=$OPT_VAULT_PUBKEY; VAULT_KEYDIR=$OPT_VAULT_KEYDIR
-    elif [ "$ASSUME_YES" = 1 ]; then
-        VAULT_MODE=later
-    else
-        say "    1) Später im Admin-Bereich erzeugen (empfohlen – der Schlüssel entsteht in deinem Browser, nie auf dem Server)"
-        say "    2) Ich habe schon einen öffentlichen Schlüssel (Datei) – jetzt speichern"
-        say "    3) Schlüsselpaar HIER auf dem Server erzeugen (der private Schlüssel muss danach heruntergeladen und gelöscht werden)"
-        local choice=""
-        ask_choice choice "Auswahl" 1 1 2 3
-        case $choice in
-            2) VAULT_MODE="file"; ask VAULT_PUBKEY "Pfad der Datei mit dem öffentlichen Schlüssel (PEM)" "" ;;
-            3) VAULT_MODE="generate" ;;
-            *) VAULT_MODE="later" ;;
-        esac
+install_cloudflared() {
+    if has_cmd cloudflared; then return 0; fi
+    if [ "$OPT_NO_PACKAGES" = 1 ]; then die "cloudflared fehlt (und --no-packages ist gesetzt)."; fi
+    local arch deb
+    arch=$(dpkg --print-architecture 2>/dev/null || uname -m)
+    case $arch in amd64|x86_64) arch=amd64 ;; arm64|aarch64) arch=arm64 ;; armhf|armv7l) arch=arm ;; i386|i686) arch=386 ;; *) die "Unbekannte Architektur für cloudflared: $arch" ;; esac
+    say "  Installiere cloudflared …"
+    if has_cmd dpkg && has_cmd curl; then
+        deb=$(mktemp --suffix=.deb); TMP_FILES+=("$deb")
+        if curl -fsSL --max-time 120 -o "$deb" "https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-$arch.deb" \
+            && dpkg -i "$deb" >/dev/null 2>&1; then
+            ok "cloudflared installiert ($(cloudflared --version 2>/dev/null | head -n1))."
+            return 0
+        fi
     fi
+    die "cloudflared konnte nicht installiert werden (Internet? Architektur $arch?). Anleitung: https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/downloads/"
+}
 
-    if [ "$VAULT_MODE" = file ]; then
-        if [ -z "$VAULT_PUBKEY" ]; then die "Kein Pfad zur Datei mit dem öffentlichen Schlüssel angegeben."; fi
-        VAULT_PUBKEY=$(lexical_path "$VAULT_PUBKEY")
-        if [ ! -f "$VAULT_PUBKEY" ] || [ ! -r "$VAULT_PUBKEY" ]; then die "Die Datei mit dem öffentlichen Schlüssel ist nicht lesbar: $VAULT_PUBKEY"; fi
-        if ! out=$(hp_stateless vault-key fingerprint <"$VAULT_PUBKEY" 2>&1); then
-            die "$(hp_fail_text "$out") Datei: $VAULT_PUBKEY. Es wurde nichts verändert."
-        fi
-        say "  → Schlüssel geprüft, Fingerabdruck $(printf '%s\n' "$out" | awk -F'\t' '$1 == "OK" { print $3; exit }')"
-    elif [ "$VAULT_MODE" = generate ]; then
-        has_cmd openssl || die "Zum Erzeugen eines Schlüsselpaars wird das Programm \"openssl\" gebraucht."
-        if [ -z "$VAULT_KEYDIR" ]; then ask VAULT_KEYDIR "Verzeichnis für den privaten Schlüssel (außerhalb des Webroots)" "${HOME:-/root}/tcd-vault-key"; fi
-        check_path_text "$VAULT_KEYDIR" "Schlüssel-Verzeichnis"
-        VAULT_KEYDIR=$(physical_path "$VAULT_KEYDIR")
-        local d
-        for d in "$ROOT_REAL" "$DATA_DIR" ${ARCH_DIR:+"$ARCH_DIR"} ${MOVE_FROM:+"$MOVE_FROM"}; do
-            if path_inside "$VAULT_KEYDIR" "$d"; then die "Der private Schlüssel darf nicht im Webroot, im Datenverzeichnis oder im Archiv liegen: $VAULT_KEYDIR"; fi
-            if path_inside "$d" "$VAULT_KEYDIR"; then die "Das Schlüssel-Verzeichnis darf Website, Daten oder Archiv nicht enthalten: $VAULT_KEYDIR"; fi
-        done
-        if [ -L "$VAULT_KEYDIR" ]; then die "Das Schlüssel-Verzeichnis darf kein symbolischer Link sein."; fi
-        if [ -d "$VAULT_KEYDIR" ]; then
-            if [ ! -O "$VAULT_KEYDIR" ]; then die "Das Schlüssel-Verzeichnis gehört nicht $(id -un): $VAULT_KEYDIR"; fi
-            if [ -e "$VAULT_KEYDIR/id-vault-private-key.pem" ]; then die "Dort liegt schon ein privater Schlüssel: $VAULT_KEYDIR/id-vault-private-key.pem (nichts überschrieben)."; fi
-            if ! dir_is_empty "$VAULT_KEYDIR"; then die "Das Schlüssel-Verzeichnis ist nicht leer: $VAULT_KEYDIR"; fi
-        elif [ ! -d "$(dirname -- "$VAULT_KEYDIR")" ]; then
-            die "Das übergeordnete Verzeichnis von $VAULT_KEYDIR existiert nicht."
+setup_tunnel() {
+    case $TUNNEL_MODE in api|token|keep) ;; *) return 0 ;; esac
+    step "Cloudflare-Tunnel"
+    install_cloudflared
+    local out rc=0
+    if [ "$TUNNEL_MODE" = api ]; then
+        out=$(cf_run apply) || rc=$?
+        show_results "$(printf '%s\n' "$out" | grep -v '^TOKEN' || true)"
+        if [ "$rc" -ne 0 ]; then bad "Der Tunnel konnte nicht eingerichtet werden."; CF_TOKEN=""; return 0; fi
+        CF_TUNNEL_TOKEN=$(printf '%s\n' "$out" | awk -F'\t' '$1 == "TOKEN" { print $2; exit }')
+        out=""; CF_TOKEN=""
+        if [ -z "$CF_TUNNEL_TOKEN" ]; then bad "Cloudflare hat keinen Tunnel-Token geliefert."; return 0; fi
+    fi
+    if [ "$TUNNEL_MODE" != keep ]; then
+        [[ $CF_TUNNEL_TOKEN =~ ^[A-Za-z0-9+/=_-]{40,}$ ]] || { bad "Ungültiger Tunnel-Token."; return 0; }
+        ( umask 077; mkdir -p /etc/cloudflared; printf 'TUNNEL_TOKEN=%s\n' "$CF_TUNNEL_TOKEN" >"$CF_TUNNEL_ENV.tmp" ) && chmod 0600 "$CF_TUNNEL_ENV.tmp" && mv -f "$CF_TUNNEL_ENV.tmp" "$CF_TUNNEL_ENV"
+        CF_TUNNEL_TOKEN=""
+        ok "Tunnel-Token gespeichert: $CF_TUNNEL_ENV (nur für root lesbar)."
+    fi
+    local bin
+    bin=$(command -v cloudflared)
+    cat >"$CF_UNIT" <<UNIT
+# angelegt von installer.sh (tcd-studio)
+[Unit]
+Description=Cloudflare Tunnel für $SITE_HOST (tcd-studio)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=notify
+EnvironmentFile=$CF_TUNNEL_ENV
+ExecStart=$bin --no-autoupdate tunnel run
+Restart=on-failure
+RestartSec=5s
+NoNewPrivileges=yes
+ProtectSystem=full
+ProtectHome=yes
+PrivateTmp=yes
+
+[Install]
+WantedBy=multi-user.target
+UNIT
+    chmod 0644 "$CF_UNIT"
+    systemctl daemon-reload >/dev/null 2>&1 || true
+    systemctl enable cloudflared-tcd.service >/dev/null 2>&1 || true
+    if systemctl restart cloudflared-tcd.service >/dev/null 2>&1; then
+        sleep 3
+        if systemctl is-active --quiet cloudflared-tcd.service; then
+            ok "Tunnel läuft (Dienst cloudflared-tcd, startet automatisch mit dem Server)."
+        else
+            bad "Der Tunnel-Dienst läuft nicht: journalctl -u cloudflared-tcd -n 50"
         fi
     else
-        VAULT_MODE=later
+        bad "Der Tunnel-Dienst konnte nicht gestartet werden: journalctl -u cloudflared-tcd -n 50"
+    fi
+    if [ "$TUNNEL_MODE" = token ]; then
+        todo "Cloudflare Zero Trust → Networks → Tunnels → dein Tunnel → Public Hostname: $SITE_HOST (und www.$SITE_HOST) mit Service http://127.0.0.1:80 eintragen."
     fi
 }
 
@@ -1082,38 +928,24 @@ gather_misc() {
         CRON_WANTED=0
     fi
     [[ $OPT_CRON_SCHEDULE =~ ^[0-9*/,-]+\ [0-9*/,-]+\ [0-9*/,-]+\ [0-9*/,A-Za-z-]+\ [0-9*/,A-Za-z-]+$ ]] || die "Ungültiger --cron-schedule (erwartet 5 Felder, z. B. \"17 3 * * *\")."
-    TEST_MAIL_TO=$OPT_TEST_MAIL
-    if [ -z "$TEST_MAIL_TO" ] && [ "$ASSUME_YES" != 1 ]; then
-        if ask_yn "Eine Test-E-Mail senden, um den Mailversand zu prüfen?" n; then
-            ask TEST_MAIL_TO "Empfänger der Test-E-Mail" "${ADMIN_EMAIL:-}"
-        fi
-    fi
-    if [ -n "$TEST_MAIL_TO" ]; then valid_email "$TEST_MAIL_TO" || die "Ungültige Test-Mail-Adresse: $TEST_MAIL_TO"; fi
 }
 
 show_plan() {
     say ""
     say "${C_BOLD}Zusammenfassung – das wird jetzt eingerichtet${C_RESET}"
     say "  Website            : $SITE_URL"
-    say "  Postfächer         : contact@ info@ imprint@ privacy-policy@ no-reply@ $MAIL_DOMAIN"
-    say "  Proxy/CDN          : $([ "$PROXY" = true ] && printf 'ja (X-Forwarded-Proto wird vertraut)' || printf 'nein')"
     say "  Datenverzeichnis   : $DATA_DIR"
     if [ -n "$MOVE_FROM" ]; then say "  Umzug              : von $MOVE_FROM (die Website ist währenddessen nur lesbar)"; fi
-    if [ "$CUR_ADMIN" = yes ]; then say "  Admin-Konto        : vorhanden (bleibt)"; else say "  Admin-Konto        : $ADMIN_EMAIL ($ADMIN_NAME)"; fi
-    case $ARCH_MODE in
-        keep) say "  Archiv             : bleibt wie eingerichtet (wird getestet)" ;;
-        dir) say "  Archiv             : Verzeichnis $ARCH_DIR" ;;
-        s3) say "  Archiv             : S3 $S3_ENDPOINT / $S3_BUCKET / $S3_PREFIX$([ "$S3_KEEP_KEYS" = 1 ] && printf ' (gespeicherte Zugangsdaten)')" ;;
-        skip) say "  Archiv             : später (bis dahin: vault-archive im Datenverzeichnis)" ;;
+    case $TUNNEL_MODE in
+        api) say "  Cloudflare-Tunnel  : $TUNNEL_NAME für ${TUNNEL_HOSTS//,/, } → Apache (nur lokal erreichbar)$([ "$CF_REPLACE_DNS" = 1 ] && printf ', DNS wird umgestellt')" ;;
+        token) say "  Cloudflare-Tunnel  : mit Tunnel-Token (Hostnamen im Cloudflare-Dashboard)" ;;
+        keep) say "  Cloudflare-Tunnel  : vorhanden (wird neu gestartet)" ;;
+        *) say "  Cloudflare-Tunnel  : nein$( [ "$OPT_NO_HTTPS" != 1 ] && is_root && printf ' (HTTPS per Lets Encrypt, wenn die Domain auf den Server zeigt)')" ;;
     esac
-    case $VAULT_MODE in
-        keep) say "  Tresor-Schlüssel   : vorhanden (bleibt)" ;;
-        later) say "  Tresor-Schlüssel   : später im Admin-Bereich" ;;
-        file) say "  Tresor-Schlüssel   : aus Datei $VAULT_PUBKEY" ;;
-        generate) say "  Tresor-Schlüssel   : wird hier erzeugt, privater Schlüssel in $VAULT_KEYDIR" ;;
-    esac
+    say "  Proxy-Modus        : $([ "$PROXY" = true ] && printf 'ja (X-Forwarded-Proto wird vertraut)' || printf 'nein')"
     say "  Wartungs-Cronjob   : $([ "$CRON_WANTED" = 1 ] && printf 'ja (%s)' "$OPT_CRON_SCHEDULE" || printf 'nein')"
     if is_root; then say "  Webserver-Benutzer : $WEB_USER:$WEB_GROUP"; else say "  Benutzer           : $(id -un)${WEB_GROUP:+, Gruppe $WEB_GROUP}"; fi
+    say "  Danach im Admin-Panel: Admin-Konto, E-Mail-Adressen, Mailserver (SMTP), Ausweis-Tresor und Archiv."
     say ""
     if [ "$ASSUME_YES" != 1 ]; then
         ask_yn "So einrichten?" j || die "Abgebrochen – es wurde nichts verändert."
@@ -1240,7 +1072,7 @@ finish_interrupted_move() {    # Zeiger steht schon, aber das Aufräumen fehlt n
 }
 
 setup_data_dir() {
-    step "2/7  Datenverzeichnis"
+    step "2/6  Datenverzeichnis"
     POINTER_FILE="$ROOT/app/data-dir.local"
     if [ -n "$MOVE_FROM" ]; then
         move_data
@@ -1267,7 +1099,7 @@ setup_data_dir() {
 }
 
 setup_permissions() {
-    step "3/7  Rechte"
+    step "3/6  Rechte"
     local d rc
     mkdir -p -- "$ROOT/legal"
     # sitemap.xml wird von PHP erzeugt (nicht im Git); die Datei muss existieren, weil PHP das Webroot selbst nicht beschreiben darf.
@@ -1311,23 +1143,14 @@ setup_permissions() {
 #  4./5. Anwendung, Admin
 # ------------------------------------------------------------------------------------------------------------------
 setup_app() {
-    step "4/7  Datenbank, Schlüssel und Einstellungen"
+    step "4/6  Datenbank, Schlüssel und Einstellungen"
     local out
     out=$(hp init 2>&1) || { printf '%s\n' "$out" >&2; die "Die Initialisierung ist fehlgeschlagen (siehe oben)."; }
     show_results "$out"
 
     local cfg="site_url=$SITE_URL"$'\n'"trust_forwarded_proto=$PROXY"
-    if [ "$MAIL_DOMAIN" != "$CUR_MAIL_DOMAIN" ] || [ "$CUR_INSTALLED" != yes ]; then
-        cfg+=$'\n'"mail.from=no-reply@$MAIL_DOMAIN"
-        cfg+=$'\n'"mail.contact=contact@$MAIL_DOMAIN"
-        cfg+=$'\n'"mail.info=info@$MAIL_DOMAIN"
-        cfg+=$'\n'"mail.imprint=imprint@$MAIL_DOMAIN"
-        cfg+=$'\n'"mail.privacy=privacy-policy@$MAIL_DOMAIN"
-        cfg+=$'\n'"mail.admin_notify=imprint@$MAIL_DOMAIN"
-        cfg+=$'\n'"mail.requests=contact@$MAIL_DOMAIN"
-    fi
     out=$(printf '%s\n' "$cfg" | hp config-set 2>&1) || { printf '%s\n' "$out" >&2; die "Die Einstellungen konnten nicht geschrieben werden."; }
-    ok "Einstellungen gespeichert (Adresse, Postfächer, Proxy: $PROXY)."
+    ok "Einstellungen gespeichert (Adresse $SITE_URL, Proxy-Modus: $PROXY)."
 
     # Impressums-Seiten, Weiterleitungen und sitemap.xml werden aus der Datenbank erzeugt (sie liegen bewusst nicht im Git).
     local rc=0
@@ -1336,175 +1159,21 @@ setup_app() {
     else bad "Impressums-Seiten/sitemap.xml konnten nicht erzeugt werden: $(printf '%s' "$out" | tail -n2 | tr '\n' ' ')"
     fi
 
-    todo "Postfächer beim Mail-Anbieter anlegen: contact@, info@, imprint@, privacy-policy@ und no-reply@$MAIL_DOMAIN (SPF/DKIM für $MAIL_DOMAIN einrichten, sonst landen Mails im Spam)."
+    todo "Admin-Panel → Settings: E-Mail-Adressen prüfen und den externen Mailserver (SMTP: Server, Port, Benutzer, Passwort deines Mail-Anbieters) eintragen – sonst verschickt die Website keine Mails. Beim Mail-Anbieter SPF/DKIM für die Absender-Domain einrichten."
+    todo "Admin-Panel → Settings → Identity vault: Schlüsselpaar im Browser erzeugen (privaten Schlüssel offline sichern) und das Archiv festlegen (eigenes Volume oder S3) – bevor Kunden Ausweise hochladen."
     todo "Backups: $DATA_DIR vollständig sichern – Datenbank und config.local.php (Datenschlüssel!) IMMER zusammen; ohne den Schlüssel sind die Adressdaten für immer unlesbar. Backups verschlüsseln. Den privaten Tresor-Schlüssel NICHT in dieses Backup."
-}
-
-setup_admin() {
-    step "5/7  Admin-Konto"
-    if [ "$CUR_ADMIN" = yes ]; then
-        ok "Es gibt schon ein Admin-Konto – nichts geändert."
-        return 0
-    fi
-    local out rc=0
-    out=$(printf '%s\n' "email=$ADMIN_EMAIL" "name=$ADMIN_NAME" "password=$ADMIN_PW" | hp admin-create 2>&1) || rc=$?
-    if [ "$rc" -eq 0 ]; then
-        ok "Admin-Konto angelegt: $ADMIN_EMAIL – Anmeldung: $SITE_URL/admin/login.php"
-        todo "Als Admin anmelden und unter Account die Zwei-Faktor-Anmeldung aktivieren (für alle, die Ausweisfotos sehen dürfen, dringend)."
-        if [ "$ADMIN_PW_GENERATED" = 1 ]; then
-            printf '\n  %s>>> Zufälliges Admin-Passwort (wird nur angezeigt, nicht gespeichert):  %s  <<<%s\n' "$C_BOLD$C_YELLOW" "$ADMIN_PW" "$C_RESET"
-            printf '      Jetzt im Passwort-Manager ablegen.\n\n'
-            SECRET_NOTES+=("Admin-Passwort für $ADMIN_EMAIL: $ADMIN_PW")
-        fi
-    elif [ "$rc" -eq 3 ]; then
-        ok "Es gibt schon ein Admin-Konto – nichts geändert."
-    else
-        bad "Das Admin-Konto konnte nicht angelegt werden: $(hp_fail_text "$out") – alternativ: php tools/create-admin.php oder $SITE_URL/admin/setup.php."
-    fi
-    ADMIN_PW=""
 }
 
 # ------------------------------------------------------------------------------------------------------------------
 #  6. Archiv und Tresor-Schlüssel
 # ------------------------------------------------------------------------------------------------------------------
-secure_delete() {
-    if has_cmd shred && shred -u -n 3 -- "$1" 2>/dev/null; then return 0; fi
-    local size
-    size=$(wc -c <"$1" 2>/dev/null || echo 0)
-    if [ "${size:-0}" -gt 0 ]; then head -c "$size" /dev/urandom >"$1" 2>/dev/null || true; fi
-    rm -f -- "$1"
-}
-
-setup_archive() {
-    step "6/7  Ausweis-Tresor"
-    local out="" rc=0 cfg
-    case $ARCH_MODE in
-        dir)
-            if [ ! -d "$ARCH_DIR" ]; then
-                if ! mkdir -m 0700 -- "$ARCH_DIR"; then bad "Das Archiv-Verzeichnis konnte nicht angelegt werden: $ARCH_DIR"; return 0; fi
-                ok "Archiv-Verzeichnis angelegt: $ARCH_DIR"
-            else
-                ok "Archiv-Verzeichnis vorhanden: $ARCH_DIR"
-            fi
-            own "$ARCH_DIR"
-            if [ -n "$WEB_GROUP" ] && ! is_root; then chmod 2770 -- "$ARCH_DIR" 2>/dev/null || true; else web_chmod 0700 "$ARCH_DIR"; fi
-            if ! web_can_enter "$ARCH_DIR"; then
-                bad "PHP kann das Archiv-Verzeichnis $ARCH_DIR nicht betreten (übergeordnetes Verzeichnis gesperrt?)."
-                return 0
-            fi
-            if [ "$(fs_id "$ARCH_DIR")" = "$(fs_id "$DATA_DIR")" ] || [ "$(fs_id "$ARCH_DIR")" = "$(fs_id "$ROOT_REAL")" ]; then
-                note "Das Archiv liegt auf demselben Dateisystem wie die Website ($(describe_fs "$ARCH_DIR")) – technisch in Ordnung, aber kein getrenntes Speichersystem."
-                todo "Bevor Kunden Ausweise hochladen: das Archiv auf ein getrenntes Speichersystem legen (eigenes Volume/Mount oder S3) – das verspricht die Datenschutzerklärung – oder die Erklärung anpassen."
-            fi
-            cfg=$'vault.driver=directory\n'"vault.dir=$ARCH_DIR"
-            out=$(printf '%s\n' "$cfg" | hp config-set 2>&1) || rc=$?
-            ;;
-        s3)
-            cfg=$'vault.driver=s3\n'"vault.s3.endpoint=$S3_ENDPOINT"$'\n'"vault.s3.bucket=$S3_BUCKET"$'\n'"vault.s3.region=$S3_REGION"$'\n'"vault.s3.prefix=$S3_PREFIX"$'\n'"vault.s3.path_style=$S3_PATH_STYLE"
-            if [ "$S3_KEEP_KEYS" != 1 ]; then cfg+=$'\n'"vault.s3.access_key=$S3_ACCESS"$'\n'"vault.s3.secret_key=$S3_SECRET"; fi
-            out=$(printf '%s\n' "$cfg" | hp config-set 2>&1) || rc=$?
-            cfg=""; S3_ACCESS=""; S3_SECRET=""
-            ;;
-        keep) : ;;
-        *)
-            note "Das Archiv wird später eingerichtet (bis dahin landen archivierte Ausweisdateien in $DATA_DIR/vault-archive)."
-            todo "Archiv einrichten (eigenes Volume oder S3): bash installer.sh --archive-dir PFAD  bzw.  --s3-endpoint … – BEVOR Kunden Ausweise hochladen."
-            return 0
-            ;;
-    esac
-    if [ "$rc" -ne 0 ]; then
-        bad "Die Archiv-Einstellungen konnten nicht gespeichert werden: $(hp_fail_text "$out")"
-        return 0
-    fi
-
-    say "  Teste das Archiv (schreiben, zurücklesen, löschen eines Probeobjekts) …"
-    rc=0
-    out=$(hp vault-probe 2>&1) || rc=$?
-    show_results "$out"
-    if [ "$rc" -ne 0 ]; then
-        todo "Archiv reparieren und unter Admin → Settings → Identity vault → Test archive erneut testen (oder den Installer erneut starten) – Kunden-Uploads erst danach."
-    fi
-    todo "Aufbewahrungsdauer der Backups festlegen (und in der Datenschutzerklärung nennen). Bei S3: keine Versionierung/Object-Lock, sonst ist die Löschung nicht unwiderruflich."
-}
-
-setup_vault_key() {
-    local out rc=0
-    case $VAULT_MODE in
-        keep) ok "Tresor-Schlüssel vorhanden (Fingerabdruck $CUR_VAULT_FP)." ;;
-        later)
-            note "Noch kein Tresor-Schlüssel – Kunden können erst Ausweisfotos hochladen, wenn er im Admin-Bereich gesetzt ist."
-            todo "Admin → Settings → Identity vault: Schlüsselpaar im Browser erzeugen, den PRIVATEN Schlüssel offline sichern (am besten zweimal, nie auf einen Server), den öffentlichen speichern."
-            ;;
-        file)
-            out=$(hp vault-key set <"$VAULT_PUBKEY" 2>&1) || rc=$?
-            show_results "$out"
-            if [ "$rc" -eq 0 ]; then
-                todo "Den zum öffentlichen Schlüssel gehörenden PRIVATEN Schlüssel offline aufbewahren (mit Sicherungskopie). Geht er verloren, sind alle Ausweisfotos für immer unlesbar."
-            fi
-            ;;
-        generate) generate_vault_key ;;
-    esac
-}
-
-generate_vault_key() {
-    local priv="$VAULT_KEYDIR/id-vault-private-key.pem" pub="$VAULT_KEYDIR/id-vault-public-key.pem" out fp rc=0
-    if [ ! -d "$VAULT_KEYDIR" ]; then
-        if ! ( umask 077; mkdir -- "$VAULT_KEYDIR" ); then bad "Das Verzeichnis für den Schlüssel konnte nicht angelegt werden: $VAULT_KEYDIR"; return 0; fi
-    fi
-    chmod 0700 -- "$VAULT_KEYDIR"
-    say "  Erzeuge ein RSA-Schlüsselpaar mit 4096 Bit (das dauert einige Sekunden) …"
-    if ! ( umask 077; openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:4096 -out "$priv" 2>/dev/null ); then
-        rm -f -- "$priv"
-        bad "openssl konnte kein Schlüsselpaar erzeugen."
-        return 0
-    fi
-    chmod 0600 -- "$priv"
-    if ! openssl pkey -in "$priv" -pubout -out "$pub" 2>/dev/null; then
-        secure_delete "$priv"
-        bad "Der öffentliche Schlüssel konnte nicht abgeleitet werden (privater Schlüssel wieder gelöscht)."
-        return 0
-    fi
-    chmod 0644 -- "$pub"
-    out=$(hp vault-key set <"$pub" 2>&1) || rc=$?
-    if [ "$rc" -ne 0 ]; then
-        secure_delete "$priv"
-        bad "Der öffentliche Schlüssel wurde nicht gespeichert ($(hp_fail_text "$out")); der private Schlüssel wurde wieder gelöscht."
-        return 0
-    fi
-    show_results "$out"
-    fp=$(hp_stateless vault-key fingerprint <"$pub" 2>/dev/null | awk -F'\t' '$1 == "OK" { print $3 }' || true)
-
-    local host user
-    host=$(hostname -f 2>/dev/null || hostname 2>/dev/null || echo "SERVER")
-    user=$(id -un)
-    say ""
-    say "  ${C_BOLD}${C_YELLOW}WICHTIG – privater Schlüssel${C_RESET}"
-    say "    Datei        : $priv"
-    say "    Fingerabdruck: $fp"
-    say "    1. JETZT auf deinen eigenen Rechner herunterladen, z. B. dort ausführen:  scp $user@$host:$(shq "$priv") ."
-    say "    2. Mindestens eine Sicherungskopie an einem anderen Ort anlegen (verschlüsselter USB-Stick, Tresor)."
-    say "    3. Danach vom Server löschen. Wer diese Datei hat, kann ALLE Ausweisfotos lesen; geht sie verloren, sind alle Fotos unlesbar."
-    if [ "$ASSUME_YES" = 1 ] || [ ! -t 0 ]; then
-        bad "Der private Tresor-Schlüssel liegt noch auf dem Server: $priv – herunterladen, sichern, dann löschen:  shred -u $(shq "$priv")"
-        return 0
-    fi
-    local confirm=""
-    ask confirm "Tippe GESICHERT, wenn du die Datei heruntergeladen und gesichert hast (sonst nur Enter)" ""
-    if [ "$confirm" = "GESICHERT" ] && ask_yn "Den privaten Schlüssel jetzt unwiderruflich vom Server löschen?" j; then
-        secure_delete "$priv"
-        if [ -e "$priv" ]; then bad "Die Datei $priv konnte nicht gelöscht werden."; else ok "Der private Schlüssel wurde vom Server gelöscht."; fi
-    else
-        bad "Der private Tresor-Schlüssel liegt noch auf dem Server: $priv – herunterladen, sichern, dann löschen:  shred -u $(shq "$priv")"
-    fi
-}
-
 # ------------------------------------------------------------------------------------------------------------------
 #  7. Cronjob, Schutz, Tests
 # ------------------------------------------------------------------------------------------------------------------
 cron_escape() { printf '%s' "${1//%/\\%}"; }
 
 setup_cron() {
-    step "7/7  Wartungs-Job, Zugriffsschutz, Abschlusstest"
+    step "6/6  Wartungs-Job, Webserver, Zugriffsschutz, Abschlusstest"
     local line out rc=0
     line="$OPT_CRON_SCHEDULE $(cron_escape "$(shq "$PHP")") $(cron_escape "$(shq "$ROOT/tools/maintenance.php")") >/dev/null 2>&1 $SITE_TAG"
 
@@ -1579,7 +1248,6 @@ install_packages() {
 
 SITE_HOST=""
 setup_webserver() {
-    SITE_HOST=${SITE_URL#*://}; SITE_HOST=${SITE_HOST%%[:/]*}
     if [ "$OPT_NO_WEBSERVER" = 1 ] || ! is_root || [ ! -d /etc/apache2/sites-available ] || ! has_cmd a2ensite; then
         if [ "$NGINX_PRESENT" = 1 ] || [[ $WEBSERVER == nginx* ]]; then
             todo "nginx: einen server{}-Block für $SITE_HOST mit root $ROOT, PHP über php-fpm und den Sperr-Regeln oben anlegen."
@@ -1590,7 +1258,11 @@ setup_webserver() {
         todo "Apache-Seite für $SITE_HOST von Hand anlegen (DocumentRoot $ROOT, AllowOverride All)."
         return 0
     fi
-    local conf="/etc/apache2/sites-available/$SITE_HOST.conf" marker="# angelegt von installer.sh (tcd-studio)" www="" tmp
+    local conf="/etc/apache2/sites-available/$SITE_HOST.conf" marker="# angelegt von installer.sh (tcd-studio)" www="" tmp REMOTEIP_BLOCK=""
+    if [ "$TUNNEL_MODE" != none ]; then
+        # Hinter dem Tunnel: echte Besucher-IP aus CF-Connecting-IP übernehmen (nur von cloudflared auf diesem Rechner)
+        REMOTEIP_BLOCK=$'    <IfModule remoteip_module>\n        RemoteIPHeader CF-Connecting-IP\n        RemoteIPInternalProxy 127.0.0.1 ::1\n    </IfModule>'
+    fi
     if [[ $SITE_HOST != www.* ]]; then www="ServerAlias www.$SITE_HOST"; fi
     if [ -f "$conf" ] && ! grep -qF -- "$marker" "$conf"; then
         if grep -q "DocumentRoot[[:space:]]*\"\?$ROOT\"\?[[:space:]]*$" "$conf" && grep -qi "AllowOverride[[:space:]]*All" "$conf"; then
@@ -1620,6 +1292,7 @@ $marker
         php_admin_value upload_max_filesize 9M
         php_admin_value post_max_size 20M
     </IfModule>
+$REMOTEIP_BLOCK
     ErrorLog \${APACHE_LOG_DIR}/$SITE_HOST-error.log
     CustomLog \${APACHE_LOG_DIR}/$SITE_HOST-access.log combined
 </VirtualHost>
@@ -1633,10 +1306,19 @@ VHOST
         fi
     fi
     local m
-    for m in rewrite alias headers; do
+    local mods="rewrite alias headers"
+    if [ "$TUNNEL_MODE" != none ]; then mods+=" remoteip"; fi
+    for m in $mods; do
         if [ ! -e "/etc/apache2/mods-enabled/$m.load" ]; then a2enmod -q "$m" >/dev/null 2>&1 && APACHE_CHANGED=1; fi
     done
     if [ ! -e "/etc/apache2/sites-enabled/$SITE_HOST.conf" ]; then a2ensite -q "$SITE_HOST" >/dev/null 2>&1 && APACHE_CHANGED=1; fi
+    if [ "$TUNNEL_MODE" != none ] && [ -f /etc/apache2/ports.conf ] && grep -qE '^[[:space:]]*Listen[[:space:]]+80[[:space:]]*$' /etc/apache2/ports.conf; then
+        # Mit Tunnel muss Apache nur lokal erreichbar sein: sonst könnte jemand direkt über die Server-IP X-Forwarded-Proto fälschen.
+        cp -p /etc/apache2/ports.conf /etc/apache2/ports.conf.tcd-backup
+        sed -i -E 's/^([[:space:]]*)Listen[[:space:]]+80[[:space:]]*$/\1Listen 127.0.0.1:80/' /etc/apache2/ports.conf
+        APACHE_CHANGED=1
+        ok "Apache lauscht jetzt nur noch lokal (127.0.0.1:80) – erreichbar ist die Website über den Tunnel (Sicherung: ports.conf.tcd-backup)."
+    fi
     if [ "$APACHE_CHANGED" = 1 ]; then
         if apache2ctl configtest >/dev/null 2>&1; then
             if systemctl restart apache2 >/dev/null 2>&1 || service apache2 restart >/dev/null 2>&1; then ok "Apache neu gestartet."
@@ -1647,7 +1329,7 @@ VHOST
     else
         ok "Apache ist bereits eingerichtet."
     fi
-    setup_https
+    if [ "$TUNNEL_MODE" = none ]; then setup_https; fi
 }
 
 setup_https() {
@@ -1659,7 +1341,6 @@ setup_https() {
     if [ -d "/etc/letsencrypt/live/$SITE_HOST" ]; then ok "HTTPS-Zertifikat für $SITE_HOST ist vorhanden."; return 0; fi
     local -a doms=(-d "$SITE_HOST") mail=(--register-unsafely-without-email)
     if [[ $SITE_HOST != www.* ]] && getent hosts "www.$SITE_HOST" >/dev/null 2>&1; then doms+=(-d "www.$SITE_HOST"); fi
-    if [ -n "${ADMIN_EMAIL:-}" ]; then mail=(-m "$ADMIN_EMAIL"); fi
     if ! getent hosts "$SITE_HOST" >/dev/null 2>&1; then
         warn "$SITE_HOST ist per DNS (noch) nicht auflösbar – kein HTTPS-Zertifikat. Wenn die Domain auf diesen Server zeigt: bash installer.sh erneut starten."
         todo "DNS: A-Eintrag von $SITE_HOST (und www) auf die IP dieses Servers setzen, dann bash installer.sh erneut starten (holt das Zertifikat)."
@@ -1804,13 +1485,6 @@ final_report() {
     show_results "$out"
 }
 
-maybe_test_mail() {
-    if [ -z "$TEST_MAIL_TO" ]; then return 0; fi
-    local out
-    out=$(hp mail-test "$TEST_MAIL_TO" 2>&1) || true
-    show_results "$out"
-}
-
 remove_installer() {
     local yes=0
     if [ "$OPT_REMOVE_INSTALLER" = 1 ]; then
@@ -1839,10 +1513,15 @@ summary() {
     fi
     say "${C_BOLD}==================================================================${C_RESET}"
     if [ -n "$SITE_URL" ]; then
-        say "  Admin-Bereich : $SITE_URL/admin/login.php"
+        say "  Admin-Bereich : $SITE_URL/admin/login.php (alles Weitere: Settings und Identity vault)"
         say "  Kundenbereich : $SITE_URL/portal/"
     fi
     if [ -n "$DATA_DIR" ]; then say "  Datenordner   : $DATA_DIR"; fi
+    if [ -n "$SETUP_TOKEN" ]; then
+        say ""
+        say "${C_BOLD}  Admin-Konto anlegen:${C_RESET} $SITE_URL/admin/setup.php"
+        printf '    Setup-Token (einmalig, nicht im Protokoll): %s\n' "$SETUP_TOKEN"
+    fi
     if [ -n "$LOG_FILE" ]; then say "  Protokoll     : $LOG_FILE (ohne Passwörter)"; fi
     if [ ${#SECRET_NOTES[@]} -gt 0 ]; then
         say ""
@@ -1904,7 +1583,15 @@ run_check_mode() {
 # ------------------------------------------------------------------------------------------------------------------
 #  Ablauf
 # ------------------------------------------------------------------------------------------------------------------
-ENV_ADMIN_PW=""; ENV_S3_AK=""; ENV_S3_SK=""
+ENV_CF_TOKEN=""; SETUP_TOKEN=""
+
+fetch_setup_token() {
+    local out
+    out=$(hp setup-token 2>&1) || { bad "Setup-Token: $(hp_fail_text "$out")"; return 0; }
+    if [ "$(hp_get "$out" admin)" = yes ]; then ok "Es gibt bereits ein Admin-Konto."; return 0; fi
+    SETUP_TOKEN=$(hp_get "$out" setup_token)
+    todo "Admin-Konto anlegen: $SITE_URL/admin/setup.php öffnen und den Setup-Token von unten eingeben – danach unter Account die Zwei-Faktor-Anmeldung aktivieren."
+}
 
 fix_group_perms() {    # nur als normaler Benutzer mit --web-group: alles Nötige für die Gruppe schreibbar machen
     if is_root || [ -z "$WEB_GROUP" ]; then return 0; fi
@@ -1921,8 +1608,8 @@ fix_group_perms() {    # nur als normaler Benutzer mit --web-group: alles Nötig
 
 main() {
     # Geheimnisse aus der Umgebung sofort übernehmen und entfernen: kein Kindprozess (auch nicht PHP als www-data) erbt sie.
-    ENV_ADMIN_PW=${TCD_ADMIN_PASSWORD-}; ENV_S3_AK=${TCD_S3_ACCESS_KEY-}; ENV_S3_SK=${TCD_S3_SECRET_KEY-}
-    unset TCD_ADMIN_PASSWORD TCD_S3_ACCESS_KEY TCD_S3_SECRET_KEY
+    ENV_CF_TOKEN=${TCD_CF_TOKEN-}
+    unset TCD_CF_TOKEN TCD_ADMIN_PASSWORD TCD_S3_ACCESS_KEY TCD_S3_SECRET_KEY
     parse_args "$@"
     say "${C_BOLD}TCD-Studio – Installer $INSTALLER_VERSION${C_RESET}"
     detect_root
@@ -1952,23 +1639,19 @@ main() {
 
     gather_data_dir
     gather_site
-    gather_admin
-    gather_archive
-    gather_vault
+    gather_tunnel
     gather_misc
     show_plan
 
     setup_data_dir
     setup_permissions
     setup_app
-    setup_admin
-    setup_archive
-    setup_vault_key
+    fetch_setup_token
     setup_cron
     setup_guard
     setup_webserver
+    setup_tunnel
     fix_group_perms
-    maybe_test_mail
     remove_installer
     http_checks
     final_report

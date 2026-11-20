@@ -357,6 +357,20 @@ try {
             ih_out($r['ok'] ? 'OK' : 'FAIL', 'Archiv-Test', ($driver === 's3' ? 'S3: ' : 'Verzeichnis: ') . $detail);
             exit($r['ok'] ? 0 : 1);
 
+        /* ------------------------------------------------------------- setup-token */
+        case 'setup-token':
+            if (admin_exists()) {
+                ih_out('INFO', 'admin', 'yes');
+                break;
+            }
+            $t = admin_setup_token();
+            if ($t === '') {
+                ih_fail('Der Setup-Token konnte nicht angelegt werden (Rechte des Datenverzeichnisses?).');
+            }
+            ih_out('INFO', 'admin', 'no');
+            ih_out('INFO', 'setup_token', $t);
+            break;
+
         /* ------------------------------------------------------------- report */
         case 'report':
             $worst = 0;
