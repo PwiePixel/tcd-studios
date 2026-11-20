@@ -34,12 +34,15 @@ function db(): PDO
         return $pdo;
     }
     $file = db_file();
+    $isNew = !is_file($file);
     $pdo = new PDO('sqlite:' . $file, null, null, [
         PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
         PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
         PDO::ATTR_EMULATE_PREPARES => false,
     ]);
-    @chmod($file, 0640);
+    if ($isNew) {
+        @chmod($file, 0640);          // only when created: an administrator may have granted a web server group write access
+    }
     $pdo->exec('PRAGMA foreign_keys = ON');
     $pdo->exec('PRAGMA busy_timeout = 5000');
     $pdo->exec('PRAGMA secure_delete = ON');      // deleted rows are overwritten with zeros (irrevocable erasure)

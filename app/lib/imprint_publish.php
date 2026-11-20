@@ -60,7 +60,7 @@ function site_write_atomic(string $file, string $data): void
         @unlink($tmp);
         // The directory itself may be read-only for PHP (e.g. the web root, which installer.sh deliberately does not hand to the web
         // server user) while the file is writable: then write the file in place.
-        if (is_file($file) && is_writable($file) && @file_put_contents($file, $data, LOCK_EX) !== false) {
+        if (!is_writable($dir) && is_file($file) && is_writable($file) && @file_put_contents($file, $data, LOCK_EX) !== false) {
             return;
         }
         throw new RuntimeException('Cannot write ' . $tmp);

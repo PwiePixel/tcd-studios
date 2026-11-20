@@ -67,6 +67,10 @@ function data_dir(): string
         if (!is_dir($line)) {
             throw new RuntimeException('The data directory named in app/data-dir.local does not exist (storage volume not mounted?) - refusing to continue');
         }
+        if (!is_file($line . '/config.local.php')) {
+            // An empty directory (e.g. an unmounted mount point) must not silently become a fresh installation with a new data key.
+            throw new RuntimeException('The data directory named in app/data-dir.local contains no config.local.php (wrong or empty volume?) - refusing to continue');
+        }
         return $resolved = rtrim($line, '/');
     }
     $dir = TCD_ROOT . '/data';

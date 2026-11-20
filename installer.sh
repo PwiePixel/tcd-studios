@@ -197,6 +197,8 @@ parse_args() {
     while [ $# -gt 0 ]; do
         arg=$1
         case $arg in
+            --check=*|--yes=*|--behind-proxy=*|--no-proxy=*|--generate-admin-password=*|--vault-later=*|--no-archive=*|--no-cron=*|--skip-http-check=*|--remove-installer=*|--no-packages=*|--no-webserver=*|--no-https=*|--help=*)
+                die "Die Option ${arg%%=*} erwartet keinen Wert (siehe --help)." ;;
             --*=*) shift; set -- "${arg%%=*}" "${arg#*=}" "$@" ;;
         esac
         case $1 in
@@ -434,6 +436,7 @@ find_php() {
     for c in "${cands[@]}"; do
         has_cmd "$c" || continue
         c=$(command -v "$c")
+        case $c in /*) ;; *) c="$(cd -P -- "$(dirname -- "$c")" && pwd -P)/${c##*/}" ;; esac
         v=$(as_web "$c" -r 'echo PHP_SAPI === "cli" && PHP_VERSION_ID >= 70400 ? PHP_VERSION : "";' 2>/dev/null || true)
         if [ -n "$v" ]; then
             PHP=$c
@@ -462,7 +465,7 @@ hp_stateless() {   # für Prüfungen ohne Daten (Passwortregeln, Schlüssel-Fing
 }
 
 hp_get() {         # hp_get "$ausgabe" schluessel -> Wert der INFO-Zeile
-    printf '%s\n' "$1" | awk -F'\t' -v k="$2" '$1 == "INFO" && $2 == k { print $3; exit }'
+    printf '%s\n' "$1" | awk -F'\t' -v k="$2" '$1 == "INFO" && $2 == k { print $3; exit }' | tr -d '\000-\037\177'
 }
 
 hp_fail_text() {   # Text der ersten FAIL/WARN-Zeile
@@ -550,6 +553,7 @@ detect_web_user() {
     fi
     if [ "$WEB_USER" = root ] || [ "$(id -u "$WEB_USER")" = 0 ]; then die "Der Webserver-Benutzer darf nicht root sein."; fi
     WEB_GROUP=${OPT_WEB_GROUP:-$(id -gn "$WEB_USER")}
+    getent group "$WEB_GROUP" >/dev/null 2>&1 || die "Die Gruppe --web-group $WEB_GROUP gibt es nicht."
     if ! has_cmd runuser && ! has_cmd sudo; then
         die "Als root werden \"runuser\" oder \"sudo\" gebraucht, um PHP als $WEB_USER auszuführen."
     fi
@@ -638,7 +642,7 @@ explain_state_problem() {  # bricht bei einem kaputten Zeiger ab (nichts wird ne
         pointer_invalid)
             die "app/data-dir.local ist unlesbar oder enthält keinen absoluten Pfad. Bitte prüfen (eine Zeile mit dem Pfad des Datenverzeichnisses). Es wurde nichts verändert." ;;
         moved_marker_without_pointer)
-            die "data/.tcd-moved sagt, dass die Daten an einen anderen Ort verschoben wurden ($(head -n1 "$ROOT/data/.tcd-moved" 2>/dev/null || true)), aber app/data-dir.local fehlt (bei einem Update gelöscht?). Zeiger wiederherstellen: den Pfad in app/data-dir.local schreiben. Es wurde nichts verändert." ;;
+            die "data/.tcd-moved sagt, dass die Daten an einen anderen Ort verschoben wurden ($(head -n1 "$ROOT/data/.tcd-moved" 2>/dev/null | tr -d '\000-\037\177' || true)), aber app/data-dir.local fehlt (bei einem Update gelöscht?). Zeiger wiederherstellen: den Pfad in app/data-dir.local schreiben. Es wurde nichts verändert." ;;
     esac
 }
 
@@ -697,6 +701,9 @@ gather_data_dir() {
 
     if [ -n "$OPT_DATA_DIR" ]; then
         chosen=$OPT_DATA_DIR
+    elif [ "$CUR_SOURCE" = pointer ] && [ "$CUR_HAS_CONFIG" != yes ] && dir_is_empty "$cur_real"; then
+        chosen=$cur_real
+        say "  app/data-dir.local nennt $cur_real (noch leer) – dort wird eingerichtet."
     elif [ "$CUR_HAS_CONFIG" = yes ]; then
         chosen=$cur_real
         say "  Vorhandene Installation gefunden: $cur_real"
@@ -740,6 +747,9 @@ gather_data_dir() {
         # Umzug einer bestehenden Installation
         if [ "$DATA_INSIDE" = 1 ]; then die "Bestehende Daten werden nie in den Webroot verschoben (Sicherheitsrisiko). Aktuell: $cur_real"; fi
         if path_inside "$DATA_DIR" "$cur_real"; then die "Das neue Datenverzeichnis darf nicht im bisherigen liegen ($cur_real)."; fi
+        if [ "$CUR_VAULT_DRIVER" = directory ] && [ -n "$CUR_VAULT_DIR" ] && path_inside "$(physical_path "$CUR_VAULT_DIR")" "$cur_real" && [ "$CUR_ARCHIVE_FILES" -gt 0 ]; then
+            die "Das Archiv ($CUR_VAULT_DIR) liegt im bisherigen Datenverzeichnis und enthält $CUR_ARCHIVE_FILES Ausweisdatei(en) – ein automatischer Umzug ist dann nicht möglich. Bitte von Hand umziehen. Nichts wurde verändert."
+        fi
         validate_new_dir "$DATA_DIR" "Das Ziel-Datenverzeichnis" ".tcd-move-incomplete"
         if [ -e "$DATA_DIR/.tcd-move-incomplete" ]; then RESUME_MOVE=1; fi
         MOVE_FROM=$cur_real
@@ -748,6 +758,11 @@ gather_data_dir() {
         if [ "$DATA_INSIDE" = 1 ]; then
             : # <Webroot>/data enthält nur .htaccess/.gitkeep
         elif [ -d "$DATA_DIR" ] && [ ! -L "$DATA_DIR" ] && [ -f "$DATA_DIR/config.local.php" ]; then
+            local owner allowed
+            owner=$(stat -c '%u' -- "$DATA_DIR/config.local.php" 2>/dev/null || echo x)
+            allowed=" 0 $(id -u) "
+            if is_root; then allowed+="$(id -u "$WEB_USER") "; fi
+            case $allowed in *" $owner "*) ;; *) die "In $DATA_DIR liegt eine config.local.php, die einem anderen Benutzer (uid $owner) gehört – sie wird aus Sicherheitsgründen nicht übernommen." ;; esac
             say "  In $DATA_DIR liegt bereits ein Datenverzeichnis dieser Anwendung – es wird übernommen."
         else
             validate_new_dir "$DATA_DIR" "Das Datenverzeichnis" ""
@@ -819,8 +834,8 @@ check_password_quiet() {   # prüft $ADMIN_PW mit den Regeln der Anwendung; Meld
 
 gather_admin() {
     # Geheimnisse aus der Umgebung übernehmen und sofort aus der Umgebung entfernen (nicht an Kindprozesse vererben)
-    local env_pw=${TCD_ADMIN_PASSWORD:-}
-    unset TCD_ADMIN_PASSWORD
+    local env_pw=$ENV_ADMIN_PW
+    ENV_ADMIN_PW=""
     if [ "$CUR_ADMIN" = yes ]; then return 0; fi
     say ""
     say "${C_BOLD}Admin-Konto${C_RESET} – Zugang zum Admin-Bereich (${SITE_URL}/admin/). Dieses Konto prüft Anträge und sieht Ausweisfotos."
@@ -867,11 +882,11 @@ gather_archive() {
     say ""
     say "${C_BOLD}Archiv für Ausweisfotos${C_RESET} – nach der Prüfung liegen die (verschlüsselten) Fotos nur noch hier, bis der Kunde den Dienst beendet."
     say "  Die Datenschutzerklärung verspricht ein getrenntes, geschütztes Speichersystem: am besten ein eigenes Volume oder ein S3-Bucket."
-    local env_ak=${TCD_S3_ACCESS_KEY:-} env_sk=${TCD_S3_SECRET_KEY:-}
-    unset TCD_S3_ACCESS_KEY TCD_S3_SECRET_KEY
+    local env_ak=$ENV_S3_AK env_sk=$ENV_S3_SK
+    ENV_S3_AK=""; ENV_S3_SK=""
 
     local configured=0
-    if [ "$CUR_VAULT_DRIVER" = s3 ] || [ "$CUR_VAULT_DIR_SET" = yes ]; then configured=1; fi
+    if [ "$CUR_VAULT_DRIVER" = s3 ] || [ "$CUR_VAULT_DIR_SET" = yes ] || [ "$CUR_ARCHIVE_FILES" -gt 0 ]; then configured=1; fi
 
     if [ "$OPT_NO_ARCHIVE" = 1 ]; then
         ARCH_MODE=skip
@@ -1000,6 +1015,8 @@ gather_vault() {
         elif [ "$OPT_VAULT_MODE" = generate ]; then
             warn "--vault-generate wurde ignoriert: es ist bereits ein Tresor-Schlüssel gespeichert."
         fi
+        local leftover="${OPT_VAULT_KEYDIR:-${HOME:-/root}/tcd-vault-key}/id-vault-private-key.pem"
+        if [ -f "$leftover" ]; then bad "Der private Tresor-Schlüssel liegt noch auf dem Server: $leftover – herunterladen, sichern, dann löschen:  shred -u $(shq "$leftover")"; fi
         return 0
     fi
     if [ "$CUR_VAULT_KEY" = invalid ]; then
@@ -1166,6 +1183,7 @@ move_data() {
     as_web sh -c 'rm -f -- "$2" && printf "%s\n" "$1" >"$2"' sh "$old" "$DATA_DIR/.tcd-move-incomplete"
 
     # Während des Kopierens kann die Website nur lesen: kein Request kann eine neue Datenbank/einen neuen Schlüssel anlegen.
+    chmod u+w -- "$old" 2>/dev/null || true          # ein früher abgebrochener Umzug kann es schreibgeschützt hinterlassen haben
     mode=$(stat -c '%a' -- "$old" 2>/dev/null || echo 750)
     if [ -L "$old" ]; then die "Das bisherige Datenverzeichnis ist ein symbolischer Link – bitte von Hand umziehen."; fi
     MOVE_LOCKED_DIR=$old; MOVE_LOCKED_MODE=$mode
@@ -1211,6 +1229,7 @@ finish_interrupted_move() {    # Zeiger steht schon, aber das Aufräumen fehlt n
     fi
     if [ -n "$old" ] && [ -d "$old" ] && [ ! -L "$old" ] && [ -f "$old/config.local.php" ]; then
         if as_web cmp -s -- "$old/config.local.php" "$DATA_DIR/config.local.php"; then
+            chmod u+w -- "$old" 2>/dev/null || true
             remove_old_entries "$old"
             ok "Aufräumen eines früheren Umzugs abgeschlossen ($old geleert)."
         else
@@ -1511,7 +1530,7 @@ setup_cron() {
         ok "Der Wartungs-Job ist bereits eingetragen."
         return 0
     fi
-    new=$(printf '%s\n' "$current" | grep -vF -- "$SITE_TAG" || true)
+    new=$(printf '%s\n' "$current" | grep -vF -- "$SITE_TAG" | awk -v r="$ROOT/tools/maintenance.php" '!(index($0, r) && $0 ~ /# tcd-studio-maintenance$/)' || true)
     if [ -n "$new" ]; then new=$(printf '%s\n%s' "$new" "$line"); else new=$line; fi
     if printf '%s\n' "$new" | "${cron_cmd[@]}" - 2>/dev/null; then
         ok "Wartungs-Job eingetragen ($OPT_CRON_SCHEDULE)$(is_root && printf ' für den Benutzer %s' "$WEB_USER")."
@@ -1885,13 +1904,38 @@ run_check_mode() {
 # ------------------------------------------------------------------------------------------------------------------
 #  Ablauf
 # ------------------------------------------------------------------------------------------------------------------
+ENV_ADMIN_PW=""; ENV_S3_AK=""; ENV_S3_SK=""
+
+fix_group_perms() {    # nur als normaler Benutzer mit --web-group: alles Nötige für die Gruppe schreibbar machen
+    if is_root || [ -z "$WEB_GROUP" ]; then return 0; fi
+    local d
+    for d in "$DATA_DIR" "$ROOT/legal" "$ROOT"/legal-notice-* ${ARCH_DIR:+"$ARCH_DIR"}; do
+        if [ -d "$d" ] && [ ! -L "$d" ]; then
+            chgrp -hR "$WEB_GROUP" -- "$d" 2>/dev/null || true
+            chmod -R g+rwX -- "$d" 2>/dev/null || true
+            find "$d" -type d -exec chmod g+s -- {} + 2>/dev/null || true
+        fi
+    done
+    if [ -f "$ROOT/sitemap.xml" ]; then chgrp "$WEB_GROUP" -- "$ROOT/sitemap.xml" 2>/dev/null || true; chmod g+rw -- "$ROOT/sitemap.xml" 2>/dev/null || true; fi
+}
+
 main() {
+    # Geheimnisse aus der Umgebung sofort übernehmen und entfernen: kein Kindprozess (auch nicht PHP als www-data) erbt sie.
+    ENV_ADMIN_PW=${TCD_ADMIN_PASSWORD-}; ENV_S3_AK=${TCD_S3_ACCESS_KEY-}; ENV_S3_SK=${TCD_S3_SECRET_KEY-}
+    unset TCD_ADMIN_PASSWORD TCD_S3_ACCESS_KEY TCD_S3_SECRET_KEY
     parse_args "$@"
     say "${C_BOLD}TCD-Studio – Installer $INSTALLER_VERSION${C_RESET}"
     detect_root
     log_line "---- Start: installer.sh (als $(id -un))"
+    if [ -n "${TCD_DATA_DIR:-}" ]; then
+        # Die Anwendung bevorzugt diese Variable – also genau dieses Verzeichnis verwenden, statt eine zweite Installation anzulegen.
+        if [ -z "$OPT_DATA_DIR" ]; then OPT_DATA_DIR=$TCD_DATA_DIR; fi
+        note "Die Umgebungsvariable TCD_DATA_DIR ist gesetzt – es wird $OPT_DATA_DIR verwendet (und per app/data-dir.local fest eingetragen)."
+        unset TCD_DATA_DIR
+    fi
     detect_webserver
     detect_web_user
+    if ! is_root && [ -n "$WEB_GROUP" ]; then umask 007; fi
     check_requirements
 
     if [ "$MODE_CHECK" = 1 ]; then run_check_mode; fi
@@ -1923,6 +1967,7 @@ main() {
     setup_cron
     setup_guard
     setup_webserver
+    fix_group_perms
     maybe_test_mail
     remove_installer
     http_checks

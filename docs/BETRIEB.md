@@ -80,7 +80,7 @@ cd /var/www/tcd-studio.de && git config core.sshCommand "ssh -i ~/.ssh/tcd_deplo
 bash installer.sh
 ```
 
-Updates: `cd /var/www/tcd-studio.de && git pull` (der Installer muss danach nicht erneut laufen). `sitemap.xml`, die Seiten in `legal/`,
+Updates: `cd /var/www/tcd-studio.de && git pull` (der Installer muss danach nicht erneut laufen). `sitemap.xml`, die Seiten in `legal/` und `legal-notice-*/`,
 `app/data-dir.local`, `.htaccess` und `data/` sind nicht im Git bzw. werden ignoriert – `git pull` kollidiert deshalb nicht mit den
 Dateien, die die Website selbst schreibt. Der Ordner `.git/` liegt im Webroot: die `.htaccess`-Regel des Installers sperrt ihn (Apache),
 bei nginx die angezeigte Regel `location ^~ /.git` eintragen; `bash installer.sh --check` prüft das.

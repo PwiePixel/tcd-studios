@@ -27,7 +27,8 @@ if (PHP_SAPI !== 'cli') {
 /** Print one result line. */
 function ih_out(string $status, string $label, string $detail = ''): void
 {
-    echo $status, "\t", str_replace(["\t", "\r", "\n"], ' ', $label), "\t", str_replace(["\t", "\r", "\n"], ' ', $detail), "\n";
+    // no control characters: values may come from files the web server can write and must not drive root's terminal
+    echo $status, "\t", preg_replace('/[\x00-\x1f\x7f]/', ' ', $label), "\t", preg_replace('/[\x00-\x1f\x7f]/', ' ', $detail), "\n";
 }
 
 /** Fatal error of the helper: message on stdout in the common format, exit code != 0. */
@@ -118,7 +119,7 @@ if ($cmd === 'status') {
     $local = $loc['dir'] . '/config.local.php';
     $hasConfig = $exists && is_file($local);
     ih_out('INFO', 'has_config', $hasConfig ? 'yes' : 'no');
-    if ($loc['problem'] !== '' || !$exists) {
+    if ($loc['problem'] !== '' || !$exists || !$hasConfig) {
         ih_out('INFO', 'installed', 'no');
         exit(0);
     }
