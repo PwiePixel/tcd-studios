@@ -198,6 +198,55 @@ function admin_vault_same_key(string $a, string $b): bool
     return $fa !== '' && $fa === vault_fingerprint($b);
 }
 
+/* ------------------------------------------------------ archive settings */
+
+/** Archived (not deleted) ID files by storage kind. @return array{dir:int,s3:int} */
+function admin_vault_archived_counts(): array
+{
+    $row = db_one(
+        'SELECT SUM(CASE WHEN archive_ref LIKE \'dir:%\' THEN 1 ELSE 0 END) AS d, SUM(CASE WHEN archive_ref LIKE \'s3:%\' THEN 1 ELSE 0 END) AS s, COUNT(*) AS n
+           FROM identity_files WHERE deleted_at IS NULL AND archive_ref IS NOT NULL AND archive_ref != \'\''
+    );
+    $d = (int) ($row['d'] ?? 0);
+    $s3 = (int) ($row['s'] ?? 0);
+    $other = (int) ($row['n'] ?? 0) - $d - $s3;
+    return ['dir' => $d + max(0, $other), 's3' => $s3];
+}
+
+/**
+ * Archive settings that must not change while archived ID files exist: their references only store the object name
+ * ("dir:<name>" inside vault.dir, "s3:<key>" inside endpoint/bucket), so a new location would make them unreadable and
+ * impossible to erase when the service ends. Prefix, region, path style and the access keys may still change.
+ *
+ * @return string[] dotted keys
+ */
+function admin_vault_locked_keys(): array
+{
+    $c = admin_vault_archived_counts();
+    $keys = [];
+    if ($c['dir'] + $c['s3'] > 0) {
+        $keys[] = 'vault.driver';
+    }
+    if ($c['dir'] > 0) {
+        $keys[] = 'vault.dir';
+    }
+    if ($c['s3'] > 0) {
+        $keys[] = 'vault.s3.endpoint';
+        $keys[] = 'vault.s3.bucket';
+    }
+    return $keys;
+}
+
+/** Non-secret archive settings in form order. @return array<string,string> dotted key => label */
+function admin_vault_setting_labels(): array
+{
+    return [
+        'vault.driver' => __('Archive type'), 'vault.dir' => __('Archive directory'), 'vault.s3.endpoint' => __('S3 endpoint'),
+        'vault.s3.region' => __('S3 region'), 'vault.s3.bucket' => __('S3 bucket'), 'vault.s3.prefix' => __('Key prefix'),
+        'vault.s3.path_style' => __('Path-style requests'), 'vault.s3.access_key' => __('S3 access key'), 'vault.s3.secret_key' => __('S3 secret key'),
+    ];
+}
+
 /* ------------------------------------------------- system checks and dashboard */
 
 /** @return array<int,array{label:string,status:string,detail:string}> */
@@ -223,7 +272,7 @@ function admin_vault_checks(): array
     } elseif ($s['dir_writable'] !== true) {
         $add(__('Vault archive directory'), 'fail', $s['dir_exists'] ? __('not writable') : __('does not exist and cannot be created'));
     } elseif ($s['in_web_root']) {
-        $add(__('Vault archive directory'), 'warn', __('The archive directory is inside the web root. Set config vault.dir (or TCD_VAULT_DIR) to a directory OUTSIDE the web root, ideally on a separate storage system.'));
+        $add(__('Vault archive directory'), 'warn', __('The archive directory is inside the web root. Choose a directory OUTSIDE the web root (ideally on a separate storage system) under Identity vault → Archive settings, or use S3 storage.'));
     } else {
         $add(__('Vault archive directory'), 'ok', __('writable and outside the web root'));
     }

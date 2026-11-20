@@ -1,7 +1,11 @@
 <?php
 declare(strict_types=1);
 
-/** Management block of the imprints, regeneration, mailbox overview and system checks. */
+/**
+ * Settings: website address, mail addresses, mail delivery (PHP mail() or the provider's SMTP server, connection test without
+ * sending any e-mail), management block of the imprints, regeneration and system checks.
+ * Website and mail settings are stored in data/config.local.php (whitelist + validation: app/lib/config_settings.php).
+ */
 require dirname(__DIR__) . '/app/bootstrap.php';
 session_boot('admin');
 $admin = auth_require('admin');
@@ -39,12 +43,129 @@ $defaults = (array) config('management', []);
 $fields = admin_management_fields();
 $errors = [];
 $formValues = null;
+$self = '/admin/settings.php';
+$local = config_local_load();
+$siteKeys = ['site_url', 'trust_forwarded_proto'];
+$mailKeys = ['mail.from', 'mail.contact', 'mail.info', 'mail.imprint', 'mail.privacy', 'mail.admin_notify', 'mail.requests'];
+$smtpKeys = ['mail.smtp.host', 'mail.smtp.port', 'mail.smtp.encryption', 'mail.smtp.username', 'mail.smtp.password'];
+$cfgErrors = [];        // dotted key (or 'admin_password') => message, for the section in $cfgSection
+$cfgForm = [];          // dotted key => submitted raw value (never secrets)
+$cfgSection = '';
+
+/** POST field name of a dotted setting key (PHP turns dots in field names into underscores anyway). */
+function admin_settings_field(string $key): string
+{
+    return str_replace('.', '_', $key);
+}
+
+/**
+ * Save validated changes to data/config.local.php, audit the changed KEY NAMES (never values) and redirect.
+ *
+ * @param array<string,mixed> $changes
+ */
+function admin_settings_save(string $auditAction, string $target, array $changes, string $okMessage): void
+{
+    if (!$changes) {
+        redirect('/admin/settings.php', ['ok' => __('Nothing changed.')]);
+    }
+    try {
+        config_local_set($changes);
+    } catch (Throwable $e) {
+        error_log('settings: cannot write config.local.php: ' . $e->getMessage());
+        redirect('/admin/settings.php', ['error' => __('The settings could not be saved: data/config.local.php is not writable. Check the permissions of the data directory.')]);
+    }
+    audit($auditAction, 'settings', $target, ['keys' => array_keys($changes)]);
+    redirect('/admin/settings.php#' . $target, ['ok' => $okMessage]);
+}
 
 if (is_post()) {
     csrf_verify();
     $action = post_str('action', 30);
 
-    if ($action === 'save_management') {
+    if ($action === 'save_site') {
+        $cfgForm = [
+            'site_url' => post_str(admin_settings_field('site_url'), 300),
+            'trust_forwarded_proto' => post_bool(admin_settings_field('trust_forwarded_proto')) ? 'true' : 'false',
+        ];
+        $diff = admin_settings_diff($cfgForm, $local);
+        $cfgErrors = $diff['errors'];
+        $cfgSection = 'site';
+        if (!$cfgErrors) {
+            admin_settings_save('settings.site', 'website', $diff['changes'], __('The website settings were saved.'));
+        }
+    } elseif ($action === 'save_mail_addresses') {
+        foreach ($mailKeys as $key) {
+            $cfgForm[$key] = post_str(admin_settings_field($key), 254);
+        }
+        $diff = admin_settings_diff($cfgForm, $local);
+        $cfgErrors = $diff['errors'];
+        $cfgSection = 'addresses';
+        if (!$cfgErrors) {
+            admin_settings_save('settings.mail_addresses', 'mail-addresses', $diff['changes'], __('The mail addresses were saved.'));
+        }
+    } elseif ($action === 'save_mail_delivery') {
+        $cfgSection = 'delivery';
+        foreach (['mail.transport', 'mail.smtp.host', 'mail.smtp.port', 'mail.smtp.encryption', 'mail.smtp.username'] as $key) {
+            $cfgForm[$key] = post_str(admin_settings_field($key), 260);
+        }
+        $diff = admin_settings_diff($cfgForm, $local);
+        $cfgErrors = $diff['errors'];
+        $changes = $diff['changes'];
+        // write-only password: empty input keeps the stored one, "clear" removes it
+        $pwInfo = admin_setting_info('mail.smtp.password', $local);
+        $pwStored = (string) $pwInfo['configured'];
+        $pwNew = admin_post_secret(admin_settings_field('mail.smtp.password'));
+        if (post_bool('mail_smtp_password_clear')) {
+            if ($pwNew !== '') {
+                $cfgErrors['mail.smtp.password'] = __('Either enter a new password or remove the stored one, not both.');
+            } elseif ($pwStored !== '') {
+                $changes['mail.smtp.password'] = '';
+            }
+        } elseif ($pwNew !== '') {
+            $err = config_setting_error('mail.smtp.password', $pwNew);
+            if ($err !== null) {
+                $cfgErrors['mail.smtp.password'] = __($err);
+            } elseif (!hash_equals($pwStored, $pwNew)) {
+                $changes['mail.smtp.password'] = $pwNew;
+            }
+        }
+        $pwNew = '';
+        // cross-field rules on the resulting configuration
+        $result = static function (string $key) use ($changes, $local) {
+            return array_key_exists($key, $changes) ? $changes[$key] : admin_setting_info($key, $local)['configured'];
+        };
+        if (!$cfgErrors) {
+            $host = (string) $result('mail.smtp.host');
+            if ($result('mail.transport') === 'smtp' && $host === '') {
+                $cfgErrors['mail.smtp.host'] = __('Please enter the SMTP server of your mail provider (for example smtp.example.com).');
+            } elseif ($host !== '' && $result('mail.smtp.encryption') === 'none' && !in_array(strtolower($host), ['127.0.0.1', 'localhost', '::1'], true)) {
+                $cfgErrors['mail.smtp.encryption'] = __('Without encryption the password would travel in plain text: "none" is only allowed for a server on this machine (127.0.0.1 or localhost). Use STARTTLS (port 587) or SSL/TLS (port 465).');
+            }
+        }
+        // step-up: the SMTP server and its login decide where the mailbox password is sent
+        $smtpChanged = array_values(array_intersect(array_keys($changes), $smtpKeys));
+        if (!$cfgErrors && $smtpChanged) {
+            $err = admin_stepup_error($admin, admin_post_raw('admin_password'), __('Please enter your current password to change the SMTP server or its login.'));
+            if ($err !== null) {
+                $cfgErrors['admin_password'] = $err;
+            }
+        }
+        if (!$cfgErrors) {
+            if ($smtpChanged) {
+                admin_smtp_forget_test();
+            }
+            admin_settings_save('settings.mail_delivery', 'mail-delivery', $changes, $changes
+                ? __('The mail delivery settings were saved. Use "Test connection" to check them – no e-mail is sent.')
+                : __('Nothing changed.'));
+        }
+    } elseif ($action === 'smtp_test') {
+        if (!rate_limit_hit('admin_smtp_test:' . (int) $admin['id'], [10, 3600])) {
+            redirect($self . '#mail-delivery', ['error' => __('Too many connection tests. Please try again later.')]);
+        }
+        $res = admin_smtp_test();
+        audit('settings.smtp_test', 'settings', 'mail-delivery', ['ok' => $res['ok']]);
+        redirect($self . '#mail-delivery', [$res['ok'] ? 'ok' : 'error' => $res['detail']]);
+    } elseif ($action === 'save_management') {
         $formValues = [];
         $changed = [];
         foreach ($fields as $key => $_label) {
@@ -97,15 +218,6 @@ if (is_post()) {
         }
         audit('settings.regenerate', 'settings', null, ['pages' => $n]);
         redirect('/admin/settings.php', ['ok' => sprintf(__('%d imprint page(s) were written again.'), $n)]);
-    } elseif ($action === 'testmail') {
-        if (!rate_limit_hit('admin_testmail:' . (int) $admin['id'], [5, 3600])) {
-            redirect('/admin/settings.php', ['error' => __('Too many test mails. Please try again later.')]);
-        }
-        $sent = send_mail((string) $admin['email'], __('Test mail from the admin panel'), "This is a test message from the admin panel of " . (string) config('site_name') . ".\nIf you can read it, outgoing mail works.");
-        audit('settings.testmail', 'settings', null, ['sent' => $sent]);
-        redirect('/admin/settings.php', $sent
-            ? ['ok' => __('A test mail was handed over to the mail system. Check your inbox (and spam folder).')]
-            : ['error' => __('The test mail could not be sent. Check the mail configuration of the server.')]);
     } elseif ($action === 'probe') {
         $res = admin_probe_data_exposure();
         audit('settings.probe_data', 'settings', null, ['result' => $res['status']]);
@@ -122,6 +234,11 @@ foreach (array_keys($defaults) as $key) {
 }
 $checks = admin_system_checks();
 
+$cfgInfo = [];
+foreach (config_setting_keys() as $key => $_type) {
+    $cfgInfo[$key] = admin_setting_info($key, $local);
+}
+
 render_view('admin/settings', [
     'title' => __('Settings'),
     'fields' => $fields,
@@ -129,6 +246,11 @@ render_view('admin/settings', [
     'current' => $formValues !== null ? array_merge($current, $formValues) : $current,
     'overrides' => $overrides,
     'errors' => $errors,
-    'mailboxes' => (array) config('mail', []),
+    'cfgInfo' => $cfgInfo,
+    'cfgErrors' => $cfgErrors,
+    'cfgForm' => $cfgForm,
+    'cfgSection' => $cfgSection,
+    'smtpTestAvailable' => admin_smtp_test_available(),
+    'smtpLastTest' => admin_smtp_last_test(),
     'checks' => $checks,
 ]);

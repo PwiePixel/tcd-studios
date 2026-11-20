@@ -119,3 +119,11 @@ Buttons: `.pf-btn`, `.pf-btn--primary`, `.pf-btn--danger`, `.pf-btn--ghost`, `.p
 Tabellen: `.pf-table` (in `.pf-table-wrap`), Badges: `.pf-badge` + `--live|--pending|--draft|--rejected|--suspended|--new|--ok|--info`
 Meldungen: `.pf-flash`, `.pf-flash--ok`, `.pf-flash--error`, `.pf-notice` (Hinweis-Kasten), `.pf-diff` (`.pf-diff-old`, `.pf-diff-new`)
 Statistik: `.pf-stat`, `.pf-stat-number`
+
+## E-Mail-Versand
+`app/lib/mail.php` `send_mail()`: `mail.transport` = `mail` (PHP `mail()`) oder `smtp` (externer Mail-Anbieter, `app/lib/smtp.php`:
+TLS ≥ 1.2 mit Zertifikatsprüfung, STARTTLS-Pflicht bei `tls`, AUTH PLAIN/LOGIN, Passwort nie im Log). Einstellbar im Admin-Panel
+(Settings → Mail delivery, Passwort nur mit Admin-Passwort, „Test connection“ verbindet sich nur und verschickt keine Mail).
+Das Kontaktformular (`backend/mailer.php`) nutzt dieselben Einstellungen (lädt nur `util.php` + `smtp.php`); `backend/config.php` ist nur noch Rückfall.
+Test-Hook: `TCD_SMTP_CAFILE` ersetzt die CA-Liste (nur für Tests). Einstellungen werden über `app/lib/config_settings.php` (Whitelist)
+in `data/config.local.php` geschrieben – vom Admin-Panel und von `tools/install-helper.php`.

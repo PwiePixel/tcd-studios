@@ -7,7 +7,12 @@ if (!defined('TCD_API')) {
 }
 
 /**
- * Building and sending the notification e-mail (plain text, UTF-8, mail()).
+ * Building and sending the notification e-mail (plain text, UTF-8).
+ *
+ * Transport, recipient and sender follow the admin panel (Settings -> Mail) when the app is installed next to api.php:
+ * mail.transport 'smtp' -> the external provider's SMTP server (app/lib/smtp.php), else PHP mail(); recipient =
+ * mail.contact, sender = mail.from. Without the app (or when its settings cannot be read) backend/config.php is used
+ * with mail().
  *
  * Header injection is prevented twice: every value that reaches a header goes
  * through tcd_header_clean() (no control characters, so no CR/LF), and the
@@ -142,18 +147,65 @@ function tcd_mail_body(array $config, array $values): string
 }
 
 /**
+ * Mail settings of the app (app/config.php + data/config.local.php, i.e. what the admin panel shows), or null when there
+ * is no app next to api.php or its settings cannot be read. Only the two side-effect-free libraries that are needed are
+ * loaded (util.php for config(), smtp.php for the SMTP client) - not app/bootstrap.php (database, sessions, ...).
+ *
+ * @return array{recipient:string,sender:string,transport:string}|null
+ */
+function tcd_app_mail_settings(): ?array
+{
+    static $done = false;
+    static $settings = null;
+    if ($done) {
+        return $settings;
+    }
+    $done = true;
+    $root = dirname(TCD_BACKEND_DIR);
+    $lib = $root . '/app/lib';
+    if (!is_file($root . '/app/config.php') || !is_file($lib . '/util.php') || !is_file($lib . '/smtp.php')) {
+        return null;
+    }
+    if (!defined('TCD_APP')) {
+        define('TCD_APP', true);
+    }
+    if (!defined('TCD_ROOT')) {
+        define('TCD_ROOT', $root);
+    }
+    try {
+        require_once $lib . '/util.php';
+        require_once $lib . '/smtp.php';
+        $settings = [
+            'recipient' => (string) config('mail.contact', ''),
+            'sender'    => (string) config('mail.from', ''),
+            'transport' => (string) config('mail.transport', 'mail'),
+        ];
+    } catch (Throwable $e) {
+        error_log('tcd-api: app mail settings unavailable, falling back to backend/config.php: ' . $e->getMessage());
+        $settings = null;
+    }
+    return $settings;
+}
+
+/**
  * Send the notification mail.
  *
  * @param array<string, mixed>  $config Backend configuration
  * @param array<string, string> $values Cleaned field values keyed by field id
- * @return bool true if mail() accepted the message for delivery
+ * @return bool true if the message was accepted for delivery
  */
 function tcd_mail_send(array $config, array $values): bool
 {
     $recipient = (string) $config['recipient'];
     $sender = (string) $config['sender'];
-    if (!function_exists('mail') || !tcd_is_valid_email($recipient) || !tcd_is_valid_email($sender)) {
-        error_log('tcd-api: mail() unavailable or recipient/sender in backend/config.php is invalid');
+    $app = tcd_app_mail_settings();
+    if ($app !== null) {
+        $recipient = tcd_is_valid_email($app['recipient']) ? $app['recipient'] : $recipient;
+        $sender = tcd_is_valid_email($app['sender']) ? $app['sender'] : $sender;
+    }
+    $smtp = $app !== null && $app['transport'] === 'smtp';
+    if ((!$smtp && !function_exists('mail')) || !tcd_is_valid_email($recipient) || !tcd_is_valid_email($sender)) {
+        error_log('tcd-api: mail() unavailable or recipient/sender (admin panel mail settings / backend/config.php) is invalid');
         return false;
     }
 
@@ -170,6 +222,23 @@ function tcd_mail_send(array $config, array $values): bool
     $headers[] = 'Content-Transfer-Encoding: quoted-printable';
 
     $body = quoted_printable_encode(tcd_mail_body($config, $values));
+
+    if ($smtp) {
+        $domain = substr($sender, (int) strrpos($sender, '@') + 1);
+        $head = array_merge([
+            'Date: ' . gmdate('D, d M Y H:i:s') . ' +0000',
+            'Message-ID: <' . bin2hex(random_bytes(16)) . '@' . $domain . '>',
+            'To: ' . $recipient,
+            'Subject: ' . $subject,
+        ], $headers);
+        try {
+            smtp_send($sender, [$recipient], implode("\r\n", $head) . "\r\n\r\n" . $body);
+            return true;
+        } catch (Throwable $e) {
+            error_log('tcd-api: SMTP delivery failed: ' . ($e instanceof RuntimeException ? $e->getMessage() : get_class($e)));
+            return false;
+        }
+    }
 
     // "-f" sets the envelope sender (return path); only with a strict address.
     $params = '';

@@ -10,9 +10,15 @@ if (!defined('TCD_API')) {
  * Site-specific settings for the contact form backend. This is the ONLY file
  * you normally need to edit.
  *
- * IMPORTANT: the mailbox in 'recipient' (contact@tcd-studio.de) MUST EXIST and
- * be able to receive mail, and the sender domain should be hosted on the same
- * server (SPF/DKIM) - otherwise messages are silently dropped or land in spam.
+ * Mail: when the admin/portal app is installed next to api.php, the recipient
+ * (mail.contact), the sender (mail.from) and the transport (PHP mail() or the
+ * external provider's SMTP server) come from the admin panel (Settings -> Mail);
+ * 'recipient' and 'sender' below are only the fallback without the app.
+ *
+ * IMPORTANT: the recipient mailbox (contact@tcd-studio.de) MUST EXIST and be
+ * able to receive mail, and the sender must be allowed to send for its domain
+ * (SPF/DKIM of the mail provider) - otherwise messages are silently dropped or
+ * land in spam.
  *
  * Keep the text values free of the characters < > & : error messages are shown
  * by the browser runtime as raw HTML.
@@ -21,11 +27,11 @@ if (!defined('TCD_API')) {
  */
 return [
     // --- Mail ---------------------------------------------------------------
-    'recipient'  => 'contact@tcd-studio.de',          // who receives the requests (must exist!)
-    'sender'     => 'no-reply@tcd-studio.de',         // From: address and envelope sender
+    'recipient'  => 'contact@tcd-studio.de',          // fallback: who receives the requests (must exist!)
+    'sender'     => 'no-reply@tcd-studio.de',         // fallback: From: address and envelope sender
     'site_name'  => 'TCD-Studio/Agency',              // display name used in the From: header
     'mail_subject' => 'New contact request via tcd-studio.de',
-    // Pass "-f <sender>" to sendmail. Set to false if the host rejects it.
+    // Pass "-f <sender>" to sendmail (mail() transport only). Set to false if the host rejects it.
     'use_envelope_sender' => true,
 
     // --- Messages shown to the visitor -------------------------------------
