@@ -46,6 +46,9 @@ Sicherheitsbindungen: Die Freigabe (`admin/review.php`) prüft zwei Prüfsummen 
 damit nur freigegeben wird, was der Admin gesehen hat; ein Schlüsseltausch in `admin/vault.php` verlangt das Admin-Passwort; `app/lib/util.php`
 (`config_local_load`, `config_local_get_or_create`) liest/ergänzt `data/config.local.php` unter Dateisperre, invalidiert OPcache und bricht bei unlesbarer
 Datei ab; `crypt_key()` erzeugt nie einen neuen Datenschlüssel, solange verschlüsselte Zeilen existieren. Tägliche Pflege: `tools/maintenance.php` (Cron).
+Installation: `installer.sh` (bash, deutsch) ruft `tools/install-helper.php` auf (check, status, init, config-set, password-check,
+admin-create, vault-key, vault-probe, report, mail-test; Geheimnisse nur über stdin). `data_dir()` liest nach `TCD_DATA_DIR` die Zeigerdatei
+`app/data-dir.local` (gitignored; nur absoluter Pfad, nur die letzte Pfadkomponente wird bei Bedarf angelegt).
 Upload-Limits: `portal/.user.ini` (9M/20M) – bei mod_php `upload_max_filesize=9M`, `post_max_size=20M` in der Server-Konfiguration setzen.
 
 ## Verzeichnisse

@@ -42,6 +42,8 @@ services/, imprint-protection/,  öffentliche Seiten des Systems (Service-Katalo
 shops/, coming-soon/             wiederverwendbare Coming-Soon-Seite: /coming-soon/?topic=…)
 app/                             PHP-Code des Systems (gesperrt per .htaccess); Architektur: docs/ARCHITECTURE.md
 data/                            Laufzeitdaten (SQLite-DB, Einstellungen, Setup-Token) – nie committen, nicht ausliefern
+                                 (liegt nach dem Installer meist außerhalb des Webroots; Zeiger: app/data-dir.local)
+installer.sh                     Einrichtung auf dem Server (bash installer.sh), Helfer: tools/install-helper.php
 
 api.php                          Einstiegspunkt der Formular-API (/api.php/form_container/captcha | submit)
 backend/                         Konfiguration, Captcha, Versand der Kontaktanfragen
@@ -57,8 +59,16 @@ sitemap.xml, robots.txt          Suchmaschinen
 
 Voraussetzungen des Hostings: Apache (oder ähnlich) mit **PHP ≥ 7.4**, Erweiterungen **GD**, **pdo_sqlite**,
 **mbstring**, **openssl**, **Sessions** und funktionierendem **`mail()`**; Schreibrechte für `data/`, `legal/` und
-`sitemap.xml`. Die Dateien in das Webroot von `tcd-studio.de` hochladen, dann `/admin/setup.php` aufrufen
-(Einrichtung des ersten Admin-Kontos, Details in [docs/BETRIEB.md](docs/BETRIEB.md)).
+`sitemap.xml`. Die Dateien in das Webroot von `tcd-studio.de` hochladen und dann per SSH im Webroot den **Installer** starten:
+
+```bash
+bash installer.sh
+```
+
+Er prüft den Server, legt das Datenverzeichnis (am besten außerhalb des Webroots), Datenbank, Datenschlüssel, das erste
+Admin-Konto, den Ausweis-Tresor (Schlüssel + Archiv mit Test) und den Wartungs-Cronjob an und gibt am Ende eine Checkliste aus.
+`bash installer.sh --check` prüft nur; `bash installer.sh --help` zeigt alle Optionen (auch für den unbeaufsichtigten Betrieb).
+Ohne SSH: `/admin/setup.php` aufrufen (Details in [docs/BETRIEB.md](docs/BETRIEB.md)).
 
 Lokal ausprobieren:
 

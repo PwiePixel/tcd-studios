@@ -68,7 +68,45 @@ Privatadresse. Die echten Daten des Kunden bleiben intern (nur der Kunde selbst 
   (dort ist noch nichts vorgesehen oder ausgelesen). Ob ein Modell mit Einbehalt und Auszahlung (z. B. Stripe Connect)
   zahlungsdiensterechtlich zulässig ist, muss vorher rechtlich/steuerlich geklärt werden.
 
-## Erste Inbetriebnahme
+## Installation mit installer.sh (empfohlen)
+
+Per SSH im Webroot (als der Benutzer, unter dem PHP läuft, oder als root):
+
+```bash
+bash installer.sh            # geführt, mit Rückfragen
+bash installer.sh --check    # nur prüfen, nichts verändern (auch später: Zugriffsschutz, System checks)
+bash installer.sh --help     # alle Optionen, auch für den unbeaufsichtigten Betrieb (--yes)
+```
+
+Der Installer erledigt die Schritte 1, 3 und 5 unten (und Teile von 4) und kann **gefahrlos erneut gestartet** werden: er ergänzt nur,
+was fehlt, ersetzt nie den Datenschlüssel, ein bestehendes Admin-Konto oder einen gespeicherten Tresor-Schlüssel.
+
+- **Prüft** PHP-Version und Erweiterungen (pdo_sqlite, gd mit JPEG, mbstring, openssl, sodium …), `mail()` und den Webserver.
+  Hinweis: geprüft wird das PHP der Kommandozeile; das des Webservers kann abweichen (danach Admin → Settings → System checks).
+- **Datenverzeichnis:** schlägt einen Ordner **außerhalb des Webroots** vor (z. B. `../tcd-studio-data`) und schreibt den Pfad in
+  `app/data-dir.local` – so finden Webserver, Cronjob und Kommandozeile die Daten ohne weitere Serverkonfiguration (die Umgebungsvariable
+  `TCD_DATA_DIR` hat weiterhin Vorrang). Eine bestehende Installation in `data/` wird auf Wunsch dorthin **verschoben**; zurück in den
+  Webroot wird nie verschoben.
+- **Rechte:** als root werden Datenverzeichnis, `legal/`, `sitemap.xml` und das Archiv dem Webserver-Benutzer (z. B. `www-data`) zugeordnet;
+  das Webroot-Verzeichnis selbst ebenfalls, falls PHP dort sonst `sitemap.xml` nicht ersetzen kann (nur das Verzeichnis, nicht die Dateien).
+- **Anwendung:** Datenbank, Datenschlüssel, `site_url`, Postfach-Adressen, ggf. Proxy-Modus (`--behind-proxy`).
+- **Admin-Konto** (Passwort verdeckt eingeben, aus Datei/Umgebungsvariable oder zufällig erzeugen; es wird nie protokolliert).
+- **Ausweis-Tresor:** öffentlichen Schlüssel aus Datei übernehmen, hier erzeugen (dann den privaten Schlüssel sofort herunterladen;
+  der Installer löscht ihn nach Bestätigung „GESICHERT“ vom Server) oder – empfohlen – später im Browser auf der Vault-Seite erzeugen.
+  Archiv: Verzeichnis (außerhalb des Webroots; Warnung, wenn es auf demselben Dateisystem wie die Website liegt) oder S3
+  (Zugangsdaten nur verdeckt oder über `TCD_S3_ACCESS_KEY`/`TCD_S3_SECRET_KEY`). Danach läuft automatisch der Archiv-Test.
+- **Cronjob** für `tools/maintenance.php` (täglich; als root in der crontab des Webserver-Benutzers). Ohne `crontab` wird die Zeile
+  zum Eintragen im Hosting-Panel angezeigt.
+- **Schutz:** Regel in der `.htaccess` des Webroots, die `installer.sh` sperrt; bei nginx/Caddy werden die nötigen Sperr-Regeln angezeigt.
+  Abschlusstest über HTTP: Startseite, Portal, Admin und dass `app/`, `data/`, `tools/`, `backend/`, `docs/` und `installer.sh`
+  **nicht** abrufbar sind (mit Testdateien, die sofort wieder gelöscht werden).
+- **Abschlussbericht** mit offenen Punkten (Postfächer, Zwei-Faktor, Backups, privater Schlüssel …). Protokoll ohne Passwörter:
+  `<Datenverzeichnis>/install.log`. Exit-Code 0 = alles erledigt, 3 = fertig mit offenen Problemen, 1 = Abbruch.
+
+Was der Installer **nicht** kann: Postfächer und DNS/HTTPS einrichten, Zwei-Faktor-Anmeldung aktivieren, den privaten Schlüssel für dich
+aufbewahren, die Rechtstexte prüfen. Ohne SSH-Zugang gilt der manuelle Weg:
+
+## Erste Inbetriebnahme (manuell)
 
 1. Alle Dateien hochladen (Webroot von tcd-studio.de). Voraussetzungen: PHP ≥ 7.4 mit **pdo_sqlite, GD, mbstring,
    openssl**, funktionierendes `mail()`, Schreibrechte für `data/` und `legal/` (und `sitemap.xml`).
@@ -87,7 +125,8 @@ Privatadresse. Die echten Daten des Kunden bleiben intern (nur der Kunde selbst 
    URLs `/legal-notice-<name>/` leiten auf die neuen Adressen weiter.
 
 **Sicherheit:** `data/` enthält die Datenbank (mit privaten Kundendaten!). Idealerweise außerhalb des Webroots
-ablegen (Umgebungsvariable `TCD_DATA_DIR` oder `data_dir` in der Hosting-Konfiguration). Mindestens muss `data/.htaccess`
+ablegen (`installer.sh` erledigt das; sonst Umgebungsvariable `TCD_DATA_DIR` oder eine Zeile mit dem absoluten Pfad in
+`app/data-dir.local`). Mindestens muss `data/.htaccess`
 greifen (Apache) – die Datenbankdatei hat einen zufälligen Namen. Regelmäßig sichern: `data/` **einschließlich
 `data/config.local.php`** (Datenbank und Schlüssel gehören zusammen, siehe unten) und `legal/`.
 

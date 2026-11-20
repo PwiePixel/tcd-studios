@@ -34,13 +34,30 @@ function random_token(int $bytes = 32): string
     return bin2hex(random_bytes($bytes));
 }
 
-/** Directory for runtime data (database, local config). Created on demand. */
+/**
+ * Directory for runtime data (database, local config). Created on demand.
+ * Order: environment variable TCD_DATA_DIR, then the one-line file app/data-dir.local (written by installer.sh when the data
+ * directory lives outside the web root - it works for the web server AND for cron/CLI without any server configuration),
+ * then <web root>/data.
+ */
 function data_dir(): string
 {
     $env = getenv('TCD_DATA_DIR');
-    $dir = ($env !== false && $env !== '') ? $env : TCD_ROOT . '/data';
+    $recursive = true;
+    if ($env === false || $env === '') {
+        $env = '';
+        $recursive = false;       // a path from the pointer file: only the last component may be created (a missing mount must not silently become a fresh empty data dir)
+        $pointer = TCD_ROOT . '/app/data-dir.local';
+        if (is_file($pointer)) {
+            $line = trim((string) @file_get_contents($pointer, false, null, 0, 4096));
+            if ($line !== '' && $line[0] === '/' && strpos($line, "\0") === false) {
+                $env = $line;
+            }
+        }
+    }
+    $dir = $env !== '' ? $env : TCD_ROOT . '/data';
     if (!is_dir($dir)) {
-        @mkdir($dir, 0750, true);
+        @mkdir($dir, 0750, $recursive || $env === '');
     }
     return rtrim($dir, '/');
 }

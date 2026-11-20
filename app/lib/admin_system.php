@@ -52,7 +52,7 @@ function admin_system_checks(): array
         $add(
             __('Data directory location'),
             'warn',
-            __('The data directory is inside the web root and only protected by data/.htaccess (Apache). Move it outside the web root and point to it with the environment variable TCD_DATA_DIR (e.g. SetEnv in .htaccess or the PHP-FPM pool).')
+            __('The data directory is inside the web root and only protected by data/.htaccess (Apache). Move it outside the web root: run installer.sh on the server (it moves the data and writes app/data-dir.local), or point to it with the environment variable TCD_DATA_DIR.')
         );
         $add(__('Data directory .htaccess'), is_file($data . '/.htaccess') ? 'ok' : 'fail', is_file($data . '/.htaccess') ? __('present') : __('missing – the database could be downloaded!'));
     } else {
