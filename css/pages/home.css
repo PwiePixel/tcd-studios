@@ -235,3 +235,10 @@
     justify-content: flex-start;
   }
 }
+
+/* Imprint Protection teaser below "Our Services" (added for tcd-studio.de) */
+.tcd-ip-teaser, .tcd-ip-teaser .ed-headline h2 { text-align: center; }
+.tcd-ip-teaser > .inner > * { width: 100%; flex-basis: 100%; }
+.tcd-ip-teaser .ed-text p { max-width: 760px; margin-left: auto; margin-right: auto; }
+.tcd-ip-buttons { display: flex; flex-wrap: wrap; justify-content: center; gap: 16px; width: 100%; }
+.tcd-ip-buttons .ed-button { margin: 0; }
