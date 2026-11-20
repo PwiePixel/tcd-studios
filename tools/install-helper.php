@@ -139,46 +139,6 @@ function ih_password_de(string $err): string
     return $err;
 }
 
-/** Atomically write data/config.local.php under the same lock the application uses. */
-function ih_config_write(array $patch): void
-{
-    $dir = data_dir();
-    $local = $dir . '/config.local.php';
-    $lock = @fopen($dir . '/config.local.lock', 'c');
-    if ($lock === false || !flock($lock, LOCK_EX)) {
-        ih_fail('data/config.local.lock ist nicht beschreibbar (Rechte des Datenverzeichnisses?).');
-    }
-    try {
-        $cfg = config_local_load();                       // fail-closed: an unreadable file throws instead of being overwritten
-        foreach ($patch as $dotted => $value) {
-            $node = &$cfg;
-            $parts = explode('.', (string) $dotted);
-            $last = array_pop($parts);
-            foreach ($parts as $part) {
-                if (!isset($node[$part]) || !is_array($node[$part])) {
-                    $node[$part] = [];
-                }
-                $node = &$node[$part];
-            }
-            $node[$last] = $value;
-            unset($node);
-        }
-        $code = "<?php\ndefined('TCD_APP') || exit;\nreturn " . var_export($cfg, true) . ";\n";
-        $tmp = $local . '.tmp' . getmypid();
-        if (@file_put_contents($tmp, $code, LOCK_EX) === false || !@rename($tmp, $local)) {
-            @unlink($tmp);
-            ih_fail('data/config.local.php konnte nicht geschrieben werden.');
-        }
-        @chmod($local, 0640);
-        if (function_exists('opcache_invalidate')) {
-            @opcache_invalidate($local, true);
-        }
-    } finally {
-        flock($lock, LOCK_UN);
-        fclose($lock);
-    }
-}
-
 /** Is this path (absolute, may not exist yet) inside the web root? */
 function ih_inside_web_root(string $path): bool
 {
@@ -264,74 +224,18 @@ try {
 
         /* ------------------------------------------------------------- config-set */
         case 'config-set':
+            // Same whitelist and validation as the admin panel (app/lib/config_settings.php).
             $kv = ih_read_kv();
-            $email = static function (string $v): bool {
-                return v_email($v);
-            };
-            $url = static function (string $v): bool {
-                $p = parse_url($v);
-                return is_array($p) && in_array($p['scheme'] ?? '', ['http', 'https'], true) && !empty($p['host']) && !isset($p['user']) && !isset($p['query']) && !isset($p['fragment']) && trim((string) ($p['path'] ?? ''), '/') === '' && preg_match('/^[\x21-\x7e]+$/', $v) === 1;
-            };
-            $token = static function (string $v): bool {
-                return preg_match('/^[A-Za-z0-9._-]{1,128}$/', $v) === 1;
-            };
-            $bool = static function (string $v): bool {
-                return $v === 'true' || $v === 'false';
-            };
-            $printable = static function (string $v): bool {
-                return preg_match('/^[\x21-\x7e]{1,256}$/', $v) === 1;
-            };
-            $rules = [
-                'site_url' => $url,
-                'mail.from' => $email, 'mail.contact' => $email, 'mail.info' => $email, 'mail.imprint' => $email,
-                'mail.privacy' => $email, 'mail.admin_notify' => $email, 'mail.requests' => $email,
-                'vault.driver' => static function (string $v): bool {
-                    return $v === 'directory' || $v === 's3';
-                },
-                'vault.dir' => static function (string $v): bool {
-                    return $v !== '' && $v[0] === '/' && rtrim($v, '/') !== '' && strlen($v) <= 1024 && preg_match('/[\x00-\x1f]/', $v) !== 1
-                        && !ih_inside_web_root($v) && !ih_is_ancestor_of_web_root($v);
-                },
-                'vault.s3.endpoint' => static function (string $v) use ($url): bool {
-                    if (!$url($v)) {
-                        return false;
-                    }
-                    $p = parse_url($v);
-                    return ($p['scheme'] ?? '') === 'https' || in_array((string) ($p['host'] ?? ''), ['127.0.0.1', 'localhost'], true);
-                },
-                'vault.s3.region' => $token,
-                'vault.s3.bucket' => static function (string $v): bool {
-                    return preg_match('/^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$/', $v) === 1 && strpos($v, '..') === false;
-                },
-                'vault.s3.access_key' => $printable,
-                'vault.s3.secret_key' => $printable,
-                'vault.s3.path_style' => $bool,
-                'vault.s3.prefix' => static function (string $v): bool {
-                    return $v === '' || (preg_match('~^[A-Za-z0-9._-]+(/[A-Za-z0-9._-]+)*/?$~', $v) === 1 && preg_match('~(^|/)\.\.?(/|$)~', $v) !== 1);
-                },
-                'trust_forwarded_proto' => $bool,
-            ];
-            $hints = [
-                'vault.dir' => ' (absoluter Pfad AUSSERHALB des Webroots, nicht "/" und kein übergeordnetes Verzeichnis des Webroots)',
-                'vault.s3.endpoint' => ' (nur https://, außer 127.0.0.1/localhost zum Testen)',
-                'vault.s3.bucket' => ' (3–63 Zeichen: Kleinbuchstaben, Ziffern, Punkt, Bindestrich)',
-                'vault.s3.prefix' => ' (z. B. tcd-id/ – ohne führenden Schrägstrich, ohne ..)',
-                'vault.s3.access_key' => ' (keine Leer- oder Steuerzeichen)',
-                'vault.s3.secret_key' => ' (keine Leer- oder Steuerzeichen)',
-            ];
             $patch = [];
             foreach ($kv as $key => $value) {
-                if (!isset($rules[$key])) {
-                    ih_fail('Unbekannte oder nicht erlaubte Einstellung: ' . $key, 2);
+                $err = config_setting_error($key, $value);
+                if ($err !== null) {
+                    ih_fail('Ungültiger Wert für ' . $key . ': ' . $err, 2);
                 }
-                if (!$rules[$key]($value)) {
-                    ih_fail('Ungültiger Wert für ' . $key . ($hints[$key] ?? ''), 2);
-                }
-                $isBool = in_array($key, ['vault.s3.path_style', 'trust_forwarded_proto'], true);
-                $patch[$key] = $isBool ? $value === 'true' : (in_array($key, ['site_url', 'vault.s3.endpoint', 'vault.dir'], true) ? rtrim($value, '/') : $value);
+                $patch[$key] = config_setting_cast($key, $value);
             }
             if ($patch !== []) {
-                ih_config_write($patch);
+                config_local_set($patch);
             }
             ih_out('OK', 'config-set', implode(',', array_keys($patch)));
             break;

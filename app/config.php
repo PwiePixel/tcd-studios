@@ -21,6 +21,10 @@ return [
         'privacy'      => 'privacy-policy@tcd-studio.de',
         'admin_notify' => 'imprint@tcd-studio.de',    // "new submission" notifications for admins
         'requests'     => 'contact@tcd-studio.de',    // service / shop requests
+        // How mails leave the server: 'mail' = PHP mail() (needs a local mail server), 'smtp' = the external mail provider
+        // (admin panel -> Settings -> Mail). The password is stored in data/config.local.php, never here.
+        'transport'    => 'mail',
+        'smtp'         => ['host' => '', 'port' => 587, 'encryption' => 'tls', 'username' => '', 'password' => '', 'timeout' => 15],
     ],
 
     // Version of the Terms and Conditions (AGB). Bump it whenever /agb/ changes in a way customers must accept again;
