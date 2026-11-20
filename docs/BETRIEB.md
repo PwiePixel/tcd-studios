@@ -97,6 +97,10 @@ Der Installer erledigt die Schritte 1, 3 und 5 unten (und Teile von 4) und kann 
 was fehlt, ersetzt nie den Datenschlüssel, ein bestehendes Admin-Konto, einen gespeicherten Tresor-Schlüssel oder ein Archiv, in dem
 schon Ausweisdateien liegen. Bevor er etwas ändert, zeigt er eine Zusammenfassung; bei „n“ bleibt alles unverändert.
 
+- **Server (als root auf Debian/Ubuntu):** installiert fehlende Pakete per apt (Apache, PHP mit allen Erweiterungen, certbot), legt die
+  Apache-Seite `/etc/apache2/sites-available/<domain>.conf` an (DocumentRoot = Webroot, `AllowOverride All`, Upload-Grenzen), aktiviert
+  sie samt `rewrite`/`headers` und holt das HTTPS-Zertifikat von Let's Encrypt, sobald die Domain per DNS auf den Server zeigt
+  (sonst einfach später erneut starten). Abschalten: `--no-packages`, `--no-webserver`, `--no-https`.
 - **Prüft** PHP-Version und Erweiterungen (pdo_sqlite, gd mit JPEG, mbstring, openssl, sodium …), `mail()` und den Webserver.
   Hinweis: geprüft wird das PHP der Kommandozeile; das des Webservers kann abweichen (danach Admin → Settings → System checks).
 - **Als root** läuft jeder PHP-Aufruf als Webserver-Benutzer (z. B. `www-data`, automatisch erkannt oder `--web-user`), nie als root.

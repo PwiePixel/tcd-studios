@@ -138,6 +138,11 @@ Ausweis-Tresor
                                 TCD_S3_ACCESS_KEY und TCD_S3_SECRET_KEY (nie als Argument!) – oder verdeckte Eingabe.
   --no-archive                  Archiv jetzt nicht einrichten
 
+Server (nur als root auf Debian/Ubuntu)
+  --no-packages           fehlende Pakete (PHP, Apache, certbot) NICHT automatisch per apt installieren
+  --no-webserver          die Apache-Seite (VirtualHost) NICHT anlegen/aktivieren
+  --no-https              kein Let's-Encrypt-Zertifikat holen
+
 Sonstiges
   --no-cron               keinen Cronjob einrichten
   --cron-schedule "M H * * *"   Zeitplan des Wartungs-Jobs (Standard: 17 3 * * *)
@@ -178,6 +183,9 @@ OPT_CRON_SCHEDULE="17 3 * * *"
 OPT_TEST_MAIL=""
 OPT_SKIP_HTTP=0
 OPT_REMOVE_INSTALLER=0
+OPT_NO_PACKAGES=0
+OPT_NO_WEBSERVER=0
+OPT_NO_HTTPS=0
 
 need_val() {       # need_val OPTION [WERT]
     if [ $# -lt 2 ] || [ -z "$2" ]; then die "Die Option $1 braucht einen Wert (siehe --help)."; fi
@@ -224,6 +232,9 @@ parse_args() {
             --test-mail) need_val "$@"; OPT_TEST_MAIL=$2; shift 2 ;;
             --skip-http-check) OPT_SKIP_HTTP=1; shift ;;
             --remove-installer) OPT_REMOVE_INSTALLER=1; shift ;;
+            --no-packages) OPT_NO_PACKAGES=1; shift ;;
+            --no-webserver) OPT_NO_WEBSERVER=1; shift ;;
+            --no-https) OPT_NO_HTTPS=1; shift ;;
             *) die "Unbekannte Option: $1 (siehe --help)" ;;
         esac
     done
@@ -558,6 +569,7 @@ check_requirements() {
         say "  (Nicht als root: es wird angenommen, dass PHP unter demselben Benutzer läuft – typisch bei Shared-Hosting.)"
     fi
 
+    install_packages
     if ! find_php; then
         die "Kein PHP ab Version 7.4 für die Kommandozeile gefunden. Mit --php /pfad/zu/php angeben (z. B. /usr/bin/php8.2)."
     fi
@@ -1509,6 +1521,140 @@ setup_cron() {
     fi
 }
 
+
+# ------------------------------------------------------------------------------------------------------------------
+#  Server-Pakete und Webserver (nur als root auf Debian/Ubuntu)
+# ------------------------------------------------------------------------------------------------------------------
+NGINX_PRESENT=0
+APACHE_CHANGED=0
+
+install_packages() {
+    if [ "$MODE_CHECK" = 1 ] || [ "$OPT_NO_PACKAGES" = 1 ] || ! is_root || ! has_cmd apt-get || ! has_cmd dpkg; then return 0; fi
+    local -a want=() missing=()
+    local p
+    if has_cmd nginx && ! has_cmd apache2; then
+        NGINX_PRESENT=1
+        want=(php-fpm php-cli php-sqlite3 php-gd php-mbstring php-curl php-xml)
+    else
+        want=(apache2 libapache2-mod-php php-cli php-sqlite3 php-gd php-mbstring php-curl php-xml)
+        if [ "$OPT_NO_HTTPS" != 1 ]; then want+=(certbot python3-certbot-apache); fi
+    fi
+    for p in "${want[@]}"; do
+        if ! dpkg -s "$p" >/dev/null 2>&1; then missing+=("$p"); fi
+    done
+    if [ ${#missing[@]} -eq 0 ]; then return 0; fi
+    say "  Fehlende Pakete: ${missing[*]}"
+    if ! ask_yn "Jetzt per apt installieren?" j; then
+        note "Pakete nicht installiert (bash installer.sh --no-packages)."
+        return 0
+    fi
+    say "  Installiere (das dauert ein bis zwei Minuten) …"
+    if ! DEBIAN_FRONTEND=noninteractive apt-get update -qq >/dev/null 2>&1; then die "apt-get update ist fehlgeschlagen (Internet/Paketquellen prüfen)."; fi
+    if ! DEBIAN_FRONTEND=noninteractive apt-get install -y -qq "${missing[@]}" >/dev/null 2>&1; then
+        die "Die Installation der Pakete ist fehlgeschlagen. Von Hand prüfen: apt-get install ${missing[*]}"
+    fi
+    ok "Pakete installiert: ${missing[*]}"
+    hash -r
+    detect_webserver
+}
+
+SITE_HOST=""
+setup_webserver() {
+    SITE_HOST=${SITE_URL#*://}; SITE_HOST=${SITE_HOST%%[:/]*}
+    if [ "$OPT_NO_WEBSERVER" = 1 ] || ! is_root || [ ! -d /etc/apache2/sites-available ] || ! has_cmd a2ensite; then
+        if [ "$NGINX_PRESENT" = 1 ] || [[ $WEBSERVER == nginx* ]]; then
+            todo "nginx: einen server{}-Block für $SITE_HOST mit root $ROOT, PHP über php-fpm und den Sperr-Regeln oben anlegen."
+        fi
+        return 0
+    fi
+    if [[ ! $SITE_HOST =~ ^[A-Za-z0-9.-]+$ ]] || [[ $ROOT == *[[:space:]\"\\]* ]]; then
+        todo "Apache-Seite für $SITE_HOST von Hand anlegen (DocumentRoot $ROOT, AllowOverride All)."
+        return 0
+    fi
+    local conf="/etc/apache2/sites-available/$SITE_HOST.conf" marker="# angelegt von installer.sh (tcd-studio)" www="" tmp
+    if [[ $SITE_HOST != www.* ]]; then www="ServerAlias www.$SITE_HOST"; fi
+    if [ -f "$conf" ] && ! grep -qF -- "$marker" "$conf"; then
+        if grep -q "DocumentRoot[[:space:]]*\"\?$ROOT\"\?[[:space:]]*$" "$conf" && grep -qi "AllowOverride[[:space:]]*All" "$conf"; then
+            ok "Apache-Seite $conf ist vorhanden (eigene Konfiguration, bleibt unverändert)."
+        else
+            warn "Es gibt bereits $conf (nicht vom Installer). Bitte prüfen: DocumentRoot $ROOT und im <Directory>-Block AllowOverride All – sonst gelten die .htaccess-Schutzregeln nicht."
+        fi
+    else
+        tmp=$(mktemp)
+        TMP_FILES+=("$tmp")
+        cat >"$tmp" <<VHOST
+$marker
+<VirtualHost *:80>
+    ServerName $SITE_HOST
+    $www
+    DocumentRoot $ROOT
+    <Directory $ROOT>
+        Options -Indexes +FollowSymLinks
+        AllowOverride All
+        Require all granted
+    </Directory>
+    <IfModule php_module>
+        php_admin_value upload_max_filesize 9M
+        php_admin_value post_max_size 20M
+    </IfModule>
+    <IfModule php7_module>
+        php_admin_value upload_max_filesize 9M
+        php_admin_value post_max_size 20M
+    </IfModule>
+    ErrorLog \${APACHE_LOG_DIR}/$SITE_HOST-error.log
+    CustomLog \${APACHE_LOG_DIR}/$SITE_HOST-access.log combined
+</VirtualHost>
+VHOST
+        if [ -f "$conf" ] && cmp -s "$tmp" "$conf"; then
+            ok "Apache-Seite $SITE_HOST ist aktuell."
+        else
+            install -m 0644 "$tmp" "$conf"
+            APACHE_CHANGED=1
+            ok "Apache-Seite angelegt: $conf (DocumentRoot $ROOT, AllowOverride All, Upload-Grenzen)."
+        fi
+    fi
+    local m
+    for m in rewrite alias headers; do
+        if [ ! -e "/etc/apache2/mods-enabled/$m.load" ]; then a2enmod -q "$m" >/dev/null 2>&1 && APACHE_CHANGED=1; fi
+    done
+    if [ ! -e "/etc/apache2/sites-enabled/$SITE_HOST.conf" ]; then a2ensite -q "$SITE_HOST" >/dev/null 2>&1 && APACHE_CHANGED=1; fi
+    if [ "$APACHE_CHANGED" = 1 ]; then
+        if apache2ctl configtest >/dev/null 2>&1; then
+            if systemctl restart apache2 >/dev/null 2>&1 || service apache2 restart >/dev/null 2>&1; then ok "Apache neu gestartet."
+            else bad "Apache konnte nicht neu gestartet werden: systemctl status apache2"; fi
+        else
+            bad "Die Apache-Konfiguration ist fehlerhaft (apache2ctl configtest) – Apache wurde NICHT neu gestartet."
+        fi
+    else
+        ok "Apache ist bereits eingerichtet."
+    fi
+    setup_https
+}
+
+setup_https() {
+    case $SITE_URL in https://*) ;; *) return 0 ;; esac
+    if [ "$OPT_NO_HTTPS" = 1 ] || ! has_cmd certbot; then
+        todo "HTTPS-Zertifikat einrichten:  certbot --apache -d $SITE_HOST"
+        return 0
+    fi
+    if [ -d "/etc/letsencrypt/live/$SITE_HOST" ]; then ok "HTTPS-Zertifikat für $SITE_HOST ist vorhanden."; return 0; fi
+    local -a doms=(-d "$SITE_HOST") mail=(--register-unsafely-without-email)
+    if [[ $SITE_HOST != www.* ]] && getent hosts "www.$SITE_HOST" >/dev/null 2>&1; then doms+=(-d "www.$SITE_HOST"); fi
+    if [ -n "${ADMIN_EMAIL:-}" ]; then mail=(-m "$ADMIN_EMAIL"); fi
+    if ! getent hosts "$SITE_HOST" >/dev/null 2>&1; then
+        warn "$SITE_HOST ist per DNS (noch) nicht auflösbar – kein HTTPS-Zertifikat. Wenn die Domain auf diesen Server zeigt: bash installer.sh erneut starten."
+        todo "DNS: A-Eintrag von $SITE_HOST (und www) auf die IP dieses Servers setzen, dann bash installer.sh erneut starten (holt das Zertifikat)."
+        return 0
+    fi
+    say "  Hole ein HTTPS-Zertifikat von Let's Encrypt für $SITE_HOST …"
+    if certbot --apache --non-interactive --agree-tos "${mail[@]}" --redirect "${doms[@]}" >/dev/null 2>&1; then
+        ok "HTTPS ist eingerichtet (Zertifikat wird automatisch erneuert)."
+    else
+        warn "Das HTTPS-Zertifikat konnte nicht geholt werden (zeigt die Domain wirklich auf diesen Server? Port 80 offen?). Details: certbot --apache -d $SITE_HOST"
+        todo "HTTPS einrichten: certbot --apache -d $SITE_HOST  (vorher DNS und Firewall Port 80/443 prüfen)."
+    fi
+}
+
 HTACCESS_BEGIN="# BEGIN tcd-installer v2"
 HTACCESS_OLD_BEGIN="# BEGIN tcd-installer"
 HTACCESS_END="# END tcd-installer"
@@ -1776,6 +1922,7 @@ main() {
     setup_vault_key
     setup_cron
     setup_guard
+    setup_webserver
     maybe_test_mail
     remove_installer
     http_checks
