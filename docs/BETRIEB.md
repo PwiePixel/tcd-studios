@@ -100,7 +100,11 @@ Der Installer macht nur die **Grundeinrichtung** – alles andere wird danach im
   Ohne Token (oder `--no-tunnel`) bleibt Apache öffentlich, und der Installer holt ein Let's-Encrypt-Zertifikat, sobald die Domain auf den Server zeigt.
 - **Apache-Seite** (`/etc/apache2/sites-available/<domain>.conf`, `AllowOverride All`, Upload-Grenzen), täglicher **Wartungs-Cronjob**,
   Schutzregeln (`installer.sh`, `.git/`), Abschlusstest über HTTP.
-- Am Ende: **Link und Setup-Token für das Admin-Konto** (`/admin/setup.php`).
+- **Admin-Konto:** legt den Admin (Standard `admin@<domain>`, `--admin-email`) mit einem zufälligen Passwort an und zeigt **E-Mail und
+  Passwort am Ende einmal an** (nicht im Protokoll). Gibt es schon einen Admin, erzeugt er auf Wunsch ein neues Passwort
+  (`--reset-admin-password`).
+- **Reparaturen:** korrigiert die Dateirechte der Website (Bilder, CSS, JS für den Webserver lesbar), ersetzt eine vorhandene
+  Apache-Seite der Domain durch die vollständige Fassung (mit Sicherung) und erzeugt Impressen und `sitemap.xml` neu.
 
 **3. Im Admin-Panel einrichten:** Admin-Konto anlegen → Account → Zwei-Faktor-Anmeldung → **Settings**: Website-Adresse, E-Mail-Adressen,
 **Mailserver (SMTP)** deines externen Mail-Anbieters (mit „Verbindung testen“, das keine Mail verschickt) → **Identity vault**:

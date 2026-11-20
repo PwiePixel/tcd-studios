@@ -126,6 +126,11 @@ Cloudflare-Tunnel (empfohlen: die Website ist dann nur über Cloudflare erreichb
   --no-tunnel             keinen Tunnel einrichten (dann HTTPS per Let's Encrypt, siehe --no-https)
   --behind-proxy / --no-proxy   X-Forwarded-Proto vertrauen bzw. nicht (beim Tunnel automatisch an)
 
+Admin-Konto
+  --admin-email ADRESSE   Login des Admin-Kontos (Standard: admin@<domain>). Der Installer legt es mit einem zufälligen
+                          Passwort an und zeigt E-Mail und Passwort am Ende EINMAL an (nicht im Protokoll).
+  --reset-admin-password  gibt es schon einen Admin: für ihn ein neues Passwort erzeugen und anzeigen
+
 Server (nur als root auf Debian/Ubuntu)
   --no-packages           fehlende Pakete (PHP, Apache, cloudflared, certbot) NICHT automatisch installieren
   --no-webserver          die Apache-Seite (VirtualHost) NICHT anlegen/aktivieren
@@ -137,7 +142,7 @@ Sonstiges
   --skip-http-check       Abschluss-Test über HTTP überspringen
   --remove-installer      installer.sh am Ende löschen
 
-Danach im Admin-Panel einrichten: Admin-Konto (Link wird am Ende angezeigt), Settings → Website/E-Mail-Adressen/
+Danach im Admin-Panel einrichten (Login wird am Ende angezeigt): Settings → Website/E-Mail-Adressen/
 Mailserver (SMTP), Identity vault → Schlüssel und Archiv. Der Installer verschickt keine E-Mails.
 
 Protokoll (ohne Geheimnisse): ~/tcd-installer.log
@@ -155,6 +160,8 @@ OPT_WEB_GROUP=""
 OPT_PROXY=""                 # "" = nicht angegeben, 1 = ja, 0 = nein
 OPT_CF_TOKEN_FILE=""
 OPT_NO_TUNNEL=0
+OPT_ADMIN_EMAIL=""
+OPT_RESET_ADMIN_PW=0
 OPT_CF_REPLACE_DNS=0
 OPT_TUNNEL_NAME=""
 OPT_NO_CRON=0
@@ -175,7 +182,7 @@ parse_args() {
     while [ $# -gt 0 ]; do
         arg=$1
         case $arg in
-            --check=*|--yes=*|--behind-proxy=*|--no-proxy=*|--no-tunnel=*|--cf-replace-dns=*|--no-cron=*|--skip-http-check=*|--remove-installer=*|--no-packages=*|--no-webserver=*|--no-https=*|--help=*)
+            --check=*|--yes=*|--behind-proxy=*|--no-proxy=*|--no-tunnel=*|--reset-admin-password=*|--cf-replace-dns=*|--no-cron=*|--skip-http-check=*|--remove-installer=*|--no-packages=*|--no-webserver=*|--no-https=*|--help=*)
                 die "Die Option ${arg%%=*} erwartet keinen Wert (siehe --help)." ;;
             --*=*) shift; set -- "${arg%%=*}" "${arg#*=}" "$@" ;;
         esac
@@ -192,6 +199,8 @@ parse_args() {
             --no-proxy) OPT_PROXY=0; shift ;;
             --cf-token-file) need_val "$@"; OPT_CF_TOKEN_FILE=$2; shift 2 ;;
             --no-tunnel) OPT_NO_TUNNEL=1; shift ;;
+            --admin-email) need_val "$@"; OPT_ADMIN_EMAIL=$2; shift 2 ;;
+            --reset-admin-password) OPT_RESET_ADMIN_PW=1; shift ;;
             --cf-replace-dns) OPT_CF_REPLACE_DNS=1; shift ;;
             --tunnel-name) need_val "$@"; OPT_TUNNEL_NAME=$2; shift 2 ;;
             --no-cron) OPT_NO_CRON=1; shift ;;
@@ -919,6 +928,64 @@ UNIT
     fi
 }
 
+ADMIN_EMAIL=""; ADMIN_PW=""; ADMIN_ACTION=""   # create | reset | keep
+gen_password() {
+    local p=""
+    if has_cmd openssl; then p=$(openssl rand -base64 48 2>/dev/null | tr -dc 'A-Za-z0-9' | cut -c1-20 || true); fi
+    if [ "${#p}" -lt 16 ]; then p=$(od -An -N64 -tx1 /dev/urandom | tr -dc 'a-f0-9' | cut -c1-24 || true); fi
+    [ "${#p}" -ge 16 ] || die "Es konnte kein Zufalls-Passwort erzeugt werden."
+    printf '%s' "$p"
+}
+
+gather_admin() {
+    say ""
+    say "${C_BOLD}Admin-Konto${C_RESET}"
+    if [ "$CUR_ADMIN" = yes ]; then
+        local out first
+        out=$(hp_noenv admin-list 2>/dev/null || true)
+        first=$(printf '%s\n' "$out" | awk -F'\t' '$1 == "INFO" && $2 == "admin_email" { print $3; exit }' | tr -d '\000-\037\177')
+        say "  Es gibt bereits ein Admin-Konto${first:+: $first}."
+        ADMIN_ACTION=keep
+        if [ "$OPT_RESET_ADMIN_PW" = 1 ] || { [ "$ASSUME_YES" != 1 ] && [ -n "$first" ] && ask_yn "Für ${first} ein neues Passwort erzeugen und anzeigen? (das alte gilt dann nicht mehr)" n; }; then
+            ADMIN_EMAIL=${OPT_ADMIN_EMAIL:-$first}
+            [ -n "$ADMIN_EMAIL" ] || die "Kein Admin-Konto gefunden, für das ein Passwort gesetzt werden kann."
+            ADMIN_ACTION=reset
+        fi
+    else
+        ask ADMIN_EMAIL "E-Mail-Adresse für den Admin-Login" "${OPT_ADMIN_EMAIL:-admin@$SITE_HOST}"
+        ADMIN_ACTION=create
+    fi
+    if [ "$ADMIN_ACTION" != keep ]; then
+        ADMIN_EMAIL=$(lower "$ADMIN_EMAIL")
+        valid_email "$ADMIN_EMAIL" || die "Ungültige E-Mail-Adresse: $ADMIN_EMAIL"
+        ADMIN_PW=$(gen_password)
+    fi
+}
+
+setup_admin() {
+    step "5/6  Admin-Konto"
+    if [ "$ADMIN_ACTION" = keep ]; then ok "Admin-Konto bleibt unverändert."; return 0; fi
+    local out rc=0
+    out=$(printf '%s\n' "email=$ADMIN_EMAIL" "name=Administrator" "password=$ADMIN_PW" "reset=$([ "$ADMIN_ACTION" = reset ] && printf yes || printf no)" | hp admin-ensure 2>&1) || rc=$?
+    if [ "$rc" -ne 0 ]; then
+        bad "Das Admin-Konto konnte nicht angelegt werden: $(hp_fail_text "$out")"
+        ADMIN_PW=""
+        fetch_setup_token
+        return 0
+    fi
+    case $(printf '%s\n' "$out" | awk -F'\t' '$1 == "OK" { print $3; exit }') in
+        created) ok "Admin-Konto angelegt: $ADMIN_EMAIL" ;;
+        reset) ok "Neues Passwort für $ADMIN_EMAIL gesetzt (alle bisherigen Anmeldungen wurden beendet)." ;;
+        *) ok "Es gibt bereits ein Admin-Konto – unverändert."; ADMIN_PW="" ;;
+    esac
+    if [ -n "$ADMIN_PW" ]; then
+        printf '\n  %s>>> Admin-Login: %s   Passwort: %s <<<%s\n      (wird nur hier angezeigt und nirgends gespeichert – jetzt im Passwort-Manager ablegen)\n\n' "$C_BOLD$C_YELLOW" "$ADMIN_EMAIL" "$ADMIN_PW" "$C_RESET"
+        SECRET_NOTES+=("Admin-Login: $ADMIN_EMAIL   Passwort: $ADMIN_PW")
+        todo "Im Admin-Panel anmelden ($SITE_URL/admin/login.php), unter Account das Passwort bei Bedarf ändern und die Zwei-Faktor-Anmeldung aktivieren."
+    fi
+    ADMIN_PW=""
+}
+
 gather_misc() {
     say ""
     say "${C_BOLD}Sonstiges${C_RESET}"
@@ -945,7 +1012,12 @@ show_plan() {
     say "  Proxy-Modus        : $([ "$PROXY" = true ] && printf 'ja (X-Forwarded-Proto wird vertraut)' || printf 'nein')"
     say "  Wartungs-Cronjob   : $([ "$CRON_WANTED" = 1 ] && printf 'ja (%s)' "$OPT_CRON_SCHEDULE" || printf 'nein')"
     if is_root; then say "  Webserver-Benutzer : $WEB_USER:$WEB_GROUP"; else say "  Benutzer           : $(id -un)${WEB_GROUP:+, Gruppe $WEB_GROUP}"; fi
-    say "  Danach im Admin-Panel: Admin-Konto, E-Mail-Adressen, Mailserver (SMTP), Ausweis-Tresor und Archiv."
+    case $ADMIN_ACTION in
+        create) say "  Admin-Konto        : $ADMIN_EMAIL (zufälliges Passwort, wird am Ende angezeigt)" ;;
+        reset) say "  Admin-Konto        : neues Passwort für $ADMIN_EMAIL (wird am Ende angezeigt)" ;;
+        *) say "  Admin-Konto        : vorhanden (bleibt)" ;;
+    esac
+    say "  Danach im Admin-Panel: E-Mail-Adressen, Mailserver (SMTP), Ausweis-Tresor und Archiv."
     say ""
     if [ "$ASSUME_YES" != 1 ]; then
         ask_yn "So einrichten?" j || die "Abgebrochen – es wurde nichts verändert."
@@ -1098,8 +1170,20 @@ setup_data_dir() {
     fi
 }
 
+fix_site_permissions() {   # Dateien der Website für den Webserver lesbar machen (häufigste Ursache für fehlende Bilder/CSS)
+    local -a prune=(-path "$ROOT/.git" -o -path "$ROOT/data" -o -path "$ROOT/legal" -o -path "$ROOT/legal-notice-*")
+    if [ "$DATA_INSIDE" = 0 ] && path_inside "$DATA_DIR" "$ROOT_REAL"; then prune+=(-o -path "$DATA_DIR"); fi
+    local n
+    n=$(find "$ROOT" \( "${prune[@]}" \) -prune -o \( -type d ! -perm -0755 -print \) -o \( -type f ! -perm -0444 -print \) 2>/dev/null | wc -l)
+    find "$ROOT" \( "${prune[@]}" \) -prune -o \( -type d -o -type f \) -exec chmod a+rX,u+w,go-w -- {} + 2>/dev/null || true
+    chmod a+rX,u+w,go-w -- "$ROOT" 2>/dev/null || true
+    if [ "$n" -gt 0 ]; then ok "Dateirechte der Website korrigiert ($n Dateien/Ordner waren für den Webserver nicht lesbar)."; else ok "Dateirechte der Website sind in Ordnung."; fi
+    if [ -d "$ROOT/.git" ] && has_cmd git; then git -C "$ROOT" config core.fileMode false 2>/dev/null || true; fi
+}
+
 setup_permissions() {
     step "3/6  Rechte"
+    fix_site_permissions
     local d rc
     mkdir -p -- "$ROOT/legal"
     # sitemap.xml wird von PHP erzeugt (nicht im Git); die Datei muss existieren, weil PHP das Webroot selbst nicht beschreiben darf.
@@ -1265,12 +1349,11 @@ setup_webserver() {
     fi
     if [[ $SITE_HOST != www.* ]]; then www="ServerAlias www.$SITE_HOST"; fi
     if [ -f "$conf" ] && ! grep -qF -- "$marker" "$conf"; then
-        if grep -q "DocumentRoot[[:space:]]*\"\?$ROOT\"\?[[:space:]]*$" "$conf" && grep -qi "AllowOverride[[:space:]]*All" "$conf"; then
-            ok "Apache-Seite $conf ist vorhanden (eigene Konfiguration, bleibt unverändert)."
-        else
-            warn "Es gibt bereits $conf (nicht vom Installer). Bitte prüfen: DocumentRoot $ROOT und im <Directory>-Block AllowOverride All – sonst gelten die .htaccess-Schutzregeln nicht."
-        fi
-    else
+        cp -p -- "$conf" "$conf.tcd-backup-$(date +%Y%m%d%H%M%S)"
+        note "Die vorhandene Apache-Seite $conf wird durch die vollständige Fassung ersetzt (Sicherung: $conf.tcd-backup-…)."
+        rm -f -- "$conf"
+    fi
+    if true; then
         tmp=$(mktemp)
         TMP_FILES+=("$tmp")
         cat >"$tmp" <<VHOST
@@ -1523,12 +1606,6 @@ summary() {
         printf '    Setup-Token (einmalig, nicht im Protokoll): %s\n' "$SETUP_TOKEN"
     fi
     if [ -n "$LOG_FILE" ]; then say "  Protokoll     : $LOG_FILE (ohne Passwörter)"; fi
-    if [ ${#SECRET_NOTES[@]} -gt 0 ]; then
-        say ""
-        say "${C_BOLD}${C_YELLOW}  Einmalige Angaben (werden nirgends gespeichert):${C_RESET}"
-        local s
-        for s in "${SECRET_NOTES[@]}"; do printf '    %s\n' "$s"; done
-    fi
     if [ ${#WARNINGS[@]} -gt 0 ]; then
         say ""
         say "${C_BOLD}  Hinweise (${#WARNINGS[@]}):${C_RESET}"
@@ -1544,6 +1621,12 @@ summary() {
     say ""
     say "  Rechtlicher Hinweis: AGB (/agb/), Datenschutzerklärung (/privacy/) und der Umgang mit Ausweisfotos wurden von einer KI"
     say "  entworfen und müssen vor dem Livegang anwaltlich geprüft werden (siehe docs/BETRIEB.md)."
+    if [ ${#SECRET_NOTES[@]} -gt 0 ]; then
+        say ""
+        say "${C_BOLD}${C_YELLOW}  Zugangsdaten (werden nirgends gespeichert – jetzt notieren):${C_RESET}"
+        local s
+        for s in "${SECRET_NOTES[@]}"; do printf '    %s\n' "$s"; done
+    fi
 }
 
 run_check_mode() {
@@ -1639,6 +1722,7 @@ main() {
 
     gather_data_dir
     gather_site
+    gather_admin
     gather_tunnel
     gather_misc
     show_plan
@@ -1646,7 +1730,7 @@ main() {
     setup_data_dir
     setup_permissions
     setup_app
-    fetch_setup_token
+    setup_admin
     setup_cron
     setup_guard
     setup_webserver

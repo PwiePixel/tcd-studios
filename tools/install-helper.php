@@ -357,6 +357,53 @@ try {
             ih_out($r['ok'] ? 'OK' : 'FAIL', 'Archiv-Test', ($driver === 's3' ? 'S3: ' : 'Verzeichnis: ') . $detail);
             exit($r['ok'] ? 0 : 1);
 
+        /* ------------------------------------------------------------- admin-ensure */
+        case 'admin-ensure':
+            // stdin: email=, name=, password=, reset=yes|no. Creates the first admin, or (reset=yes) sets a new password for the
+            // admin with that e-mail address (all its sessions end). Prints the account that was created/changed.
+            $kv = ih_read_kv();
+            $email = mb_strtolower(trim((string) ($kv['email'] ?? '')), 'UTF-8');
+            $name = trim((string) ($kv['name'] ?? 'Administrator'));
+            $pw = (string) ($kv['password'] ?? '');
+            if (!v_email($email)) {
+                ih_fail('Die E-Mail-Adresse ist ungültig.');
+            }
+            $err = auth_password_error($pw, $email);
+            if ($err !== null) {
+                ih_fail(ih_password_de($err));
+            }
+            $res = db_transaction(static function () use ($email, $name, $pw, $kv) {
+                if (!admin_exists()) {
+                    return ['created', auth_create_admin($email, $name !== '' ? $name : 'Administrator', $pw)];
+                }
+                if (($kv['reset'] ?? 'no') !== 'yes') {
+                    return ['exists', 0];
+                }
+                $u = db_one('SELECT id FROM users WHERE role = \'admin\' AND lower(email) = ?', [$email]);
+                if ($u === null) {
+                    return ['unknown', 0];
+                }
+                db_exec('UPDATE users SET password_hash = ?, status = \'active\' WHERE id = ?', [auth_hash_password($pw), (int) $u['id']]);
+                auth_bump_session_epoch((int) $u['id']);
+                audit('user.password_reset', 'user', (int) $u['id'], ['via' => 'installer'], null);
+                return ['reset', (int) $u['id']];
+            });
+            if ($res[0] === 'created') {
+                @unlink(admin_setup_token_file());
+            }
+            if ($res[0] === 'unknown') {
+                ih_fail('Es gibt kein Admin-Konto mit dieser E-Mail-Adresse.');
+            }
+            ih_out('OK', 'admin', $res[0]);
+            break;
+
+        /* ------------------------------------------------------------- admin-list */
+        case 'admin-list':
+            foreach (db_all('SELECT email FROM users WHERE role = \'admin\' ORDER BY id') as $row) {
+                ih_out('INFO', 'admin_email', (string) $row['email']);
+            }
+            break;
+
         /* ------------------------------------------------------------- setup-token */
         case 'setup-token':
             if (admin_exists()) {
