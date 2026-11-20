@@ -1239,6 +1239,8 @@ setup_permissions() {
     step "3/7  Rechte"
     local d rc
     mkdir -p -- "$ROOT/legal"
+    # sitemap.xml wird von PHP erzeugt (nicht im Git); die Datei muss existieren, weil PHP das Webroot selbst nicht beschreiben darf.
+    if [ ! -e "$ROOT/sitemap.xml" ]; then ( umask 022; : >"$ROOT/sitemap.xml" ); fi
     if is_root; then
         chown -hR "$WEB_USER:$WEB_GROUP" -- "$DATA_DIR"
         for d in "$ROOT/legal" "$ROOT"/legal-notice-*; do
