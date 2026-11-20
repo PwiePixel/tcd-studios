@@ -35,31 +35,48 @@ function random_token(int $bytes = 32): string
 }
 
 /**
- * Directory for runtime data (database, local config). Created on demand.
- * Order: environment variable TCD_DATA_DIR, then the one-line file app/data-dir.local (written by installer.sh when the data
- * directory lives outside the web root - it works for the web server AND for cron/CLI without any server configuration),
- * then <web root>/data.
+ * Directory for runtime data (database, local config).
+ * Order: environment variable TCD_DATA_DIR (created on demand), then the one-line file app/data-dir.local (written by installer.sh
+ * when the data directory lives outside the web root - it works for the web server AND for cron/CLI without any server
+ * configuration), then <web root>/data.
+ *
+ * Fail closed: a pointer that is unreadable/invalid or points to a missing directory (volume not mounted), or a missing pointer
+ * while data/.tcd-moved says the data was moved away, throws instead of silently starting a fresh, empty installation with a new
+ * data key next to the real one.
  */
 function data_dir(): string
 {
+    static $resolved = null;
     $env = getenv('TCD_DATA_DIR');
-    $recursive = true;
-    if ($env === false || $env === '') {
-        $env = '';
-        $recursive = false;       // a path from the pointer file: only the last component may be created (a missing mount must not silently become a fresh empty data dir)
-        $pointer = TCD_ROOT . '/app/data-dir.local';
-        if (is_file($pointer)) {
-            $line = trim((string) @file_get_contents($pointer, false, null, 0, 4096));
-            if ($line !== '' && $line[0] === '/' && strpos($line, "\0") === false) {
-                $env = $line;
-            }
+    if ($env !== false && $env !== '') {
+        if (!is_dir($env)) {
+            @mkdir($env, 0750, true);
         }
+        return rtrim($env, '/');
     }
-    $dir = $env !== '' ? $env : TCD_ROOT . '/data';
+    if ($resolved !== null) {
+        return $resolved;
+    }
+    $pointer = TCD_ROOT . '/app/data-dir.local';
+    if (is_file($pointer)) {
+        $raw = @file_get_contents($pointer, false, null, 0, 4096);
+        $line = $raw === false ? '' : rtrim($raw, "\r\n");
+        if ($line === '' || $line[0] !== '/' || preg_match('/[\x00-\x1f]/', $line) === 1) {
+            throw new RuntimeException('app/data-dir.local is unreadable or does not contain an absolute path - refusing to continue');
+        }
+        if (!is_dir($line)) {
+            throw new RuntimeException('The data directory named in app/data-dir.local does not exist (storage volume not mounted?) - refusing to continue');
+        }
+        return $resolved = rtrim($line, '/');
+    }
+    $dir = TCD_ROOT . '/data';
+    if (is_file($dir . '/.tcd-moved')) {
+        throw new RuntimeException('data/.tcd-moved says the data directory was moved, but app/data-dir.local is missing - refusing to continue');
+    }
     if (!is_dir($dir)) {
-        @mkdir($dir, 0750, $recursive || $env === '');
+        @mkdir($dir, 0750, true);
     }
-    return rtrim($dir, '/');
+    return $resolved = $dir;
 }
 
 /**

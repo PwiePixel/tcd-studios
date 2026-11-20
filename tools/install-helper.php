@@ -3,15 +3,14 @@ declare(strict_types=1);
 
 /**
  * Helper of installer.sh (CLI only). It reuses the application's own functions, so the installer and the admin panel always
- * behave identically. Not meant to be called by hand, but harmless: every command is idempotent or read-only, except
- * those that say otherwise below.
+ * behave identically. installer.sh runs it as the web server user (never as root when a web user is known).
  *
  * Output: one result per line, "STATUS<TAB>label<TAB>detail" (STATUS = OK, WARN, FAIL, INFO). Secrets are NEVER passed
  * as arguments; commands read "key=value" lines from standard input instead.
  *
  *   check                 PHP version/extensions/mail (read-only, works without the app)
- *   status                state of an existing installation (read-only)
- *   init                  create data directories, database (migrations) and the data key
+ *   status                state of an existing installation (read-only: creates nothing)
+ *   init                  create database (migrations), data key, session and inbox directories
  *   config-set            (stdin: key=value lines) merge whitelisted settings into data/config.local.php
  *   password-check        (stdin: email=, password=) is the password acceptable?
  *   admin-create          (stdin: email=, name=, password=) create the first admin account
@@ -49,7 +48,7 @@ function ih_read_kv(): array
         }
         $pos = strpos($line, '=');
         if ($pos === false || $pos === 0) {
-            ih_fail('Ungueltige Eingabezeile (erwartet key=value).', 2);
+            ih_fail('Ungültige Eingabezeile (erwartet key=value).', 2);
         }
         $kv[substr($line, 0, $pos)] = substr($line, $pos + 1);
     }
@@ -64,27 +63,80 @@ if ($cmd === 'check') {
         ih_out($good ? 'OK' : $badLevel, $label, $good ? $detailOk : $detailBad);
     };
     $ok(version_compare(PHP_VERSION, '7.4.0', '>='), 'PHP-Version', PHP_VERSION, PHP_VERSION . ' ist zu alt (erforderlich: 7.4 oder neuer)');
-    foreach (['pdo_sqlite' => 'Datenbank (SQLite)', 'mbstring' => 'Zeichensaetze', 'openssl' => 'Verschluesselung (OpenSSL)', 'sodium' => 'Verschluesselung (libsodium)', 'session' => 'Sitzungen', 'json' => 'JSON', 'ctype' => 'ctype'] as $ext => $what) {
+    foreach (['pdo_sqlite' => 'Datenbank (SQLite)', 'mbstring' => 'Zeichensätze', 'openssl' => 'Verschlüsselung (OpenSSL)', 'sodium' => 'Verschlüsselung (libsodium)', 'session' => 'Sitzungen', 'json' => 'JSON', 'ctype' => 'ctype'] as $ext => $what) {
         $ok(extension_loaded($ext), 'PHP-Erweiterung ' . $ext, 'vorhanden', 'fehlt (' . $what . ')');
     }
     $gd = extension_loaded('gd');
     $jpeg = $gd && function_exists('imagecreatefromjpeg') && function_exists('imagejpeg') && function_exists('imagecreatefromstring');
-    $ok($jpeg, 'PHP-Erweiterung gd (mit JPEG)', 'vorhanden', $gd ? 'GD ohne JPEG-Unterstuetzung - Ausweisfotos koennen nicht verarbeitet werden' : 'fehlt - ohne GD koennen keine Ausweisfotos verarbeitet werden');
-    $ok(extension_loaded('curl'), 'PHP-Erweiterung curl', 'vorhanden', 'fehlt (nur noetig fuer ein S3-Archiv)', 'WARN');
+    $ok($jpeg, 'PHP-Erweiterung gd (mit JPEG)', 'vorhanden', $gd ? 'GD ohne JPEG-Unterstützung – Ausweisfotos können nicht verarbeitet werden' : 'fehlt – ohne GD können keine Ausweisfotos verarbeitet werden');
+    $ok(extension_loaded('curl'), 'PHP-Erweiterung curl', 'vorhanden', 'fehlt (nur nötig für ein S3-Archiv)', 'WARN');
     $disabled = array_map('trim', explode(',', (string) ini_get('disable_functions')));
-    $ok(function_exists('mail') && !in_array('mail', $disabled, true), 'E-Mail-Versand mail()', 'verfuegbar', 'mail() ist nicht verfuegbar/deaktiviert - es koennen keine E-Mails versendet werden', 'WARN');
+    $ok(function_exists('mail') && !in_array('mail', $disabled, true), 'E-Mail-Versand mail()', 'verfügbar', 'mail() ist nicht verfügbar/deaktiviert – es können keine E-Mails versendet werden', 'WARN');
     $sendmail = trim((string) ini_get('sendmail_path'));
     if ($sendmail !== '') {
         $bin = preg_split('/\s+/', $sendmail)[0] ?? '';
-        $ok($bin !== '' && is_executable($bin), 'sendmail_path', $sendmail, $sendmail . ' ist nicht ausfuehrbar (gilt fuer die Kommandozeile; der Webserver kann abweichen)', 'WARN');
+        $ok($bin !== '' && is_executable($bin), 'sendmail_path', $sendmail, $sendmail . ' ist nicht ausführbar (gilt für die Kommandozeile; der Webserver kann abweichen)', 'WARN');
     } else {
-        ih_out('WARN', 'sendmail_path', 'leer (fuer die Kommandozeile; Webserver-PHP kann abweichen)');
+        ih_out('WARN', 'sendmail_path', 'leer (gilt für die Kommandozeile; das PHP des Webservers kann abweichen)');
     }
     ih_out('INFO', 'PHP-Binary', PHP_BINARY !== '' ? PHP_BINARY : 'unbekannt');
     exit(0);
 }
 
-require dirname(__DIR__) . '/app/bootstrap.php';
+define('IH_ROOT', dirname(__DIR__));
+
+/**
+ * Where would the application look for its data - computed WITHOUT creating anything (unlike data_dir()).
+ * @return array{dir:string,source:string,problem:string}
+ */
+function ih_locate_data_dir(): array
+{
+    $env = getenv('TCD_DATA_DIR');
+    if ($env !== false && $env !== '') {
+        return ['dir' => rtrim($env, '/'), 'source' => 'env', 'problem' => ''];
+    }
+    $pointer = IH_ROOT . '/app/data-dir.local';
+    if (is_file($pointer)) {
+        $raw = @file_get_contents($pointer, false, null, 0, 4096);
+        $line = $raw === false ? '' : rtrim($raw, "\r\n");
+        if ($line === '' || $line[0] !== '/' || preg_match('/[\x00-\x1f]/', $line) === 1) {
+            return ['dir' => '', 'source' => 'pointer', 'problem' => 'pointer_invalid'];
+        }
+        return ['dir' => rtrim($line, '/'), 'source' => 'pointer', 'problem' => is_dir($line) ? '' : 'pointer_target_missing'];
+    }
+    $dir = IH_ROOT . '/data';
+    return ['dir' => $dir, 'source' => 'default', 'problem' => is_file($dir . '/.tcd-moved') ? 'moved_marker_without_pointer' : ''];
+}
+
+if ($cmd === 'status') {
+    $loc = ih_locate_data_dir();
+    ih_out('INFO', 'data_dir', $loc['dir']);
+    ih_out('INFO', 'data_dir_source', $loc['source']);
+    ih_out('INFO', 'problem', $loc['problem']);
+    $exists = $loc['dir'] !== '' && is_dir($loc['dir']);
+    ih_out('INFO', 'data_dir_exists', $exists ? 'yes' : 'no');
+    $local = $loc['dir'] . '/config.local.php';
+    $hasConfig = $exists && is_file($local);
+    ih_out('INFO', 'has_config', $hasConfig ? 'yes' : 'no');
+    if ($loc['problem'] !== '' || !$exists) {
+        ih_out('INFO', 'installed', 'no');
+        exit(0);
+    }
+}
+
+require IH_ROOT . '/app/bootstrap.php';
+
+/** German text for the password rule messages of the application. */
+function ih_password_de(string $err): string
+{
+    $map = ['/at least (\d+) characters/' => 'Das Passwort muss mindestens %s Zeichen lang sein.', '/longer than 72/' => 'Das Passwort darf höchstens 72 Bytes lang sein.', '/too easy/' => 'Dieses Passwort ist zu leicht zu erraten.'];
+    foreach ($map as $re => $de) {
+        if (preg_match($re, $err, $m) === 1) {
+            return sprintf($de, $m[1] ?? '');
+        }
+    }
+    return $err;
+}
 
 /** Atomically write data/config.local.php under the same lock the application uses. */
 function ih_config_write(array $patch): void
@@ -126,10 +178,31 @@ function ih_config_write(array $patch): void
     }
 }
 
-/** Is this directory/file path (absolute, may not exist yet) inside the web root? */
+/** Is this path (absolute, may not exist yet) inside the web root? */
 function ih_inside_web_root(string $path): bool
 {
     return admin_path_inside_web_root($path);
+}
+
+/** Is $path the web root or one of its ancestors? */
+function ih_is_ancestor_of_web_root(string $path): bool
+{
+    $root = realpath(TCD_ROOT);
+    $p = realpath($path);
+    if ($root === false || $p === false) {
+        return false;
+    }
+    return $p === '/' || $p === $root || strpos($root . '/', rtrim($p, '/') . '/') === 0;
+}
+
+/** PEM read from stdin (UTF-8 BOM and surrounding whitespace removed). */
+function ih_read_pem(): string
+{
+    $pem = (string) stream_get_contents(STDIN);
+    if (strncmp($pem, "\xEF\xBB\xBF", 3) === 0) {
+        $pem = substr($pem, 3);
+    }
+    return trim($pem);
 }
 
 try {
@@ -137,7 +210,6 @@ try {
         /* ------------------------------------------------------------- status (read-only) */
         case 'status':
             $dir = data_dir();
-            ih_out('INFO', 'data_dir', $dir);
             ih_out('INFO', 'data_dir_in_web_root', ih_inside_web_root($dir) ? 'yes' : 'no');
             $local = $dir . '/config.local.php';
             $cfg = is_file($local) ? config_local_load() : [];
@@ -145,23 +217,35 @@ try {
             $dbExists = $dbName !== '' && preg_match('/^[A-Za-z0-9._-]+$/', $dbName) === 1 && is_file($dir . '/' . $dbName);
             ih_out('INFO', 'installed', $dbExists ? 'yes' : 'no');
             ih_out('INFO', 'data_key', !empty($cfg['data_key']) ? 'yes' : 'no');
+            $admin = 'no';
+            $vkey = 'none';
+            $vfp = '';
+            $archived = 0;
             if ($dbExists) {
-                ih_out('INFO', 'admin', admin_exists() ? 'yes' : 'no');
+                $admin = admin_exists() ? 'yes' : 'no';
                 $pem = vault_public_key_pem();
-                ih_out('INFO', 'vault_key', $pem === '' ? 'none' : (vault_validate_public_key($pem) === null ? 'ok' : 'invalid'));
-                ih_out('INFO', 'vault_fingerprint', $pem === '' ? '' : vault_fingerprint($pem));
-            } else {
-                ih_out('INFO', 'admin', 'no');
-                ih_out('INFO', 'vault_key', 'none');
-                ih_out('INFO', 'vault_fingerprint', '');
+                $vkey = $pem === '' ? 'none' : (vault_validate_public_key($pem) === null ? 'ok' : 'invalid');
+                $vfp = $pem === '' ? '' : vault_fingerprint($pem);
+                $archived = (int) (db_one('SELECT COUNT(*) AS n FROM identity_files WHERE deleted_at IS NULL AND archive_ref IS NOT NULL AND archive_ref != \'\'')['n'] ?? 0);
             }
+            ih_out('INFO', 'admin', $admin);
+            ih_out('INFO', 'vault_key', $vkey);
+            ih_out('INFO', 'vault_fingerprint', $vfp);
+            ih_out('INFO', 'archive_files', (string) $archived);
             ih_out('INFO', 'site_url', (string) config('site_url'));
-            ih_out('INFO', 'vault_driver', (string) config('vault.driver', 'directory'));
-            ih_out('INFO', 'vault_dir', (string) config('vault.driver', 'directory') === 's3' ? '' : admin_vault_archive_path());
+            ih_out('INFO', 'trust_forwarded_proto', config('trust_forwarded_proto', false) ? 'true' : 'false');
+            $driver = (string) config('vault.driver', 'directory') === 's3' ? 's3' : 'directory';
+            ih_out('INFO', 'vault_driver', $driver);
+            ih_out('INFO', 'vault_dir', $driver === 's3' ? '' : admin_vault_archive_path());
             ih_out('INFO', 'vault_dir_configured', trim((string) config('vault.dir', '')) !== '' ? 'yes' : 'no');
+            $s3 = (array) config('vault.s3', []);
+            ih_out('INFO', 's3_endpoint', (string) ($s3['endpoint'] ?? ''));
+            ih_out('INFO', 's3_bucket', (string) ($s3['bucket'] ?? ''));
+            ih_out('INFO', 's3_region', (string) ($s3['region'] ?? ''));
+            ih_out('INFO', 's3_prefix', (string) ($s3['prefix'] ?? ''));
+            ih_out('INFO', 's3_path_style', !empty($s3['path_style']) ? 'true' : 'false');
+            ih_out('INFO', 's3_keys', !empty($s3['access_key']) && !empty($s3['secret_key']) ? 'yes' : 'no');
             ih_out('INFO', 'mail_domain', (string) substr((string) strrchr((string) config('mail.from'), '@'), 1));
-            ih_out('INFO', 'legal_dir', legal_dir());
-            ih_out('INFO', 'sitemap_file', imprint_sitemap_path());
             break;
 
         /* ------------------------------------------------------------- init */
@@ -174,7 +258,7 @@ try {
             crypt_key();                                   // creates the data key once (never replaces an existing one)
             session_dir();                                 // creates data/sessions
             vault_inbox_dir();                             // creates data/vault-inbox
-            ih_out('OK', 'init', basename(db_file()));
+            ih_out('OK', 'Datenbank', basename(db_file()));
             break;
 
         /* ------------------------------------------------------------- config-set */
@@ -193,35 +277,46 @@ try {
             $bool = static function (string $v): bool {
                 return $v === 'true' || $v === 'false';
             };
+            $printable = static function (string $v): bool {
+                return preg_match('/^[\x21-\x7e]{1,256}$/', $v) === 1;
+            };
             $rules = [
                 'site_url' => $url,
-                'site_name' => static function (string $v): bool {
-                    return $v !== '' && mb_strlen($v, 'UTF-8') <= 80 && preg_match('/[<>\x00-\x1f]/', $v) !== 1;
-                },
                 'mail.from' => $email, 'mail.contact' => $email, 'mail.info' => $email, 'mail.imprint' => $email,
                 'mail.privacy' => $email, 'mail.admin_notify' => $email, 'mail.requests' => $email,
                 'vault.driver' => static function (string $v): bool {
                     return $v === 'directory' || $v === 's3';
                 },
                 'vault.dir' => static function (string $v): bool {
-                    return $v !== '' && $v[0] === '/' && strlen($v) <= 1024 && preg_match('/[\x00-\x1f]/', $v) !== 1 && !ih_inside_web_root($v);
+                    return $v !== '' && $v[0] === '/' && rtrim($v, '/') !== '' && strlen($v) <= 1024 && preg_match('/[\x00-\x1f]/', $v) !== 1
+                        && !ih_inside_web_root($v) && !ih_is_ancestor_of_web_root($v);
                 },
-                'vault.s3.endpoint' => $url,
+                'vault.s3.endpoint' => static function (string $v) use ($url): bool {
+                    if (!$url($v)) {
+                        return false;
+                    }
+                    $p = parse_url($v);
+                    return ($p['scheme'] ?? '') === 'https' || in_array((string) ($p['host'] ?? ''), ['127.0.0.1', 'localhost'], true);
+                },
                 'vault.s3.region' => $token,
                 'vault.s3.bucket' => static function (string $v): bool {
-                    return preg_match('/^[A-Za-z0-9][A-Za-z0-9._-]{1,254}$/', $v) === 1;
+                    return preg_match('/^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$/', $v) === 1 && strpos($v, '..') === false;
                 },
-                'vault.s3.access_key' => static function (string $v): bool {
-                    return preg_match('/^[\x21-\x7e]{1,256}$/', $v) === 1;
-                },
-                'vault.s3.secret_key' => static function (string $v): bool {
-                    return preg_match('/^[\x21-\x7e]{1,256}$/', $v) === 1;
-                },
+                'vault.s3.access_key' => $printable,
+                'vault.s3.secret_key' => $printable,
                 'vault.s3.path_style' => $bool,
                 'vault.s3.prefix' => static function (string $v): bool {
-                    return $v === '' || preg_match('~^[A-Za-z0-9._/-]{1,128}$~', $v) === 1;
+                    return $v === '' || (preg_match('~^[A-Za-z0-9._-]+(/[A-Za-z0-9._-]+)*/?$~', $v) === 1 && preg_match('~(^|/)\.\.?(/|$)~', $v) !== 1);
                 },
                 'trust_forwarded_proto' => $bool,
+            ];
+            $hints = [
+                'vault.dir' => ' (absoluter Pfad AUSSERHALB des Webroots, nicht "/" und kein übergeordnetes Verzeichnis des Webroots)',
+                'vault.s3.endpoint' => ' (nur https://, außer 127.0.0.1/localhost zum Testen)',
+                'vault.s3.bucket' => ' (3–63 Zeichen: Kleinbuchstaben, Ziffern, Punkt, Bindestrich)',
+                'vault.s3.prefix' => ' (z. B. tcd-id/ – ohne führenden Schrägstrich, ohne ..)',
+                'vault.s3.access_key' => ' (keine Leer- oder Steuerzeichen)',
+                'vault.s3.secret_key' => ' (keine Leer- oder Steuerzeichen)',
             ];
             $patch = [];
             foreach ($kv as $key => $value) {
@@ -229,10 +324,10 @@ try {
                     ih_fail('Unbekannte oder nicht erlaubte Einstellung: ' . $key, 2);
                 }
                 if (!$rules[$key]($value)) {
-                    ih_fail('Ungueltiger Wert fuer ' . $key . ($key === 'vault.dir' ? ' (muss ein absoluter Pfad AUSSERHALB des Webroots sein)' : ''), 2);
+                    ih_fail('Ungültiger Wert für ' . $key . ($hints[$key] ?? ''), 2);
                 }
                 $isBool = in_array($key, ['vault.s3.path_style', 'trust_forwarded_proto'], true);
-                $patch[$key] = $isBool ? $value === 'true' : ($key === 'site_url' || $key === 'vault.s3.endpoint' ? rtrim($value, '/') : $value);
+                $patch[$key] = $isBool ? $value === 'true' : (in_array($key, ['site_url', 'vault.s3.endpoint', 'vault.dir'], true) ? rtrim($value, '/') : $value);
             }
             if ($patch !== []) {
                 ih_config_write($patch);
@@ -247,14 +342,7 @@ try {
             if ($err === null) {
                 ih_out('OK', 'password', '');
             } else {
-                $map = ['/at least (\d+) characters/' => 'Das Passwort muss mindestens $1 Zeichen lang sein.', '/longer than 72/' => 'Das Passwort darf höchstens 72 Bytes lang sein.', '/too easy/' => 'Dieses Passwort ist zu leicht zu erraten.'];
-                foreach ($map as $re => $de) {
-                    if (preg_match($re, $err, $m) === 1) {
-                        $err = (string) preg_replace('/\$1/', $m[1] ?? '', $de);
-                        break;
-                    }
-                }
-                ih_out('FAIL', 'password', $err);
+                ih_out('FAIL', 'password', ih_password_de($err));
                 exit(1);
             }
             break;
@@ -265,19 +353,24 @@ try {
             $email = mb_strtolower(trim((string) ($kv['email'] ?? '')), 'UTF-8');
             $name = trim((string) ($kv['name'] ?? ''));
             if (!v_email($email)) {
-                ih_fail('Die E-Mail-Adresse ist ungueltig.');
+                ih_fail('Die E-Mail-Adresse ist ungültig.');
             }
             if (!v_len($name, 2, 80) || !v_oneline($name)) {
                 ih_fail('Der Name muss 2 bis 80 Zeichen lang sein (eine Zeile).');
             }
-            if (admin_exists()) {
-                ih_out('WARN', 'admin-create', 'Es existiert bereits ein Admin-Konto - nichts geaendert.');
-                exit(3);
-            }
             try {
-                $uid = auth_create_admin($email, $name, (string) ($kv['password'] ?? ''));
+                $uid = db_transaction(static function () use ($email, $name, $kv) {
+                    if (admin_exists()) {
+                        return 0;                          // checked inside the write lock: parallel runs cannot create two admins
+                    }
+                    return auth_create_admin($email, $name, (string) ($kv['password'] ?? ''));
+                });
             } catch (InvalidArgumentException $e) {
-                ih_fail($e->getMessage());
+                ih_fail(ih_password_de($e->getMessage()));
+            }
+            if ($uid === 0) {
+                ih_out('WARN', 'admin-create', 'Es existiert bereits ein Admin-Konto – nichts geändert.');
+                exit(3);
             }
             @unlink(admin_setup_token_file());             // the web setup page is not needed any more
             ih_out('OK', 'admin-create', (string) $uid);
@@ -297,10 +390,18 @@ try {
                 }
                 break;
             }
-            $pem = trim((string) stream_get_contents(STDIN));
+            $pem = ih_read_pem();
             $err = vault_validate_public_key($pem);
             if ($err !== null) {
-                ih_fail('Kein gueltiger oeffentlicher RSA-Schluessel (PEM "BEGIN PUBLIC KEY", mindestens 3072 Bit).' . ($pem !== '' && strpos($pem, 'PRIVATE KEY') !== false ? ' ACHTUNG: Das ist ein PRIVATER Schluessel - den darf man nie weitergeben.' : ''));
+                $why = 'Kein gültiger öffentlicher RSA-Schlüssel (erwartet: PEM mit "-----BEGIN PUBLIC KEY-----", mindestens 3072 Bit).';
+                if (strpos($pem, 'PRIVATE KEY') !== false) {
+                    $why .= ' ACHTUNG: Das ist ein PRIVATER Schlüssel – den nie auf den Server legen oder weitergeben!';
+                } elseif (strpos($pem, 'BEGIN RSA PUBLIC KEY') !== false) {
+                    $why .= ' Die Datei hat das ältere PKCS#1-Format; umwandeln mit: openssl rsa -RSAPublicKey_in -in DATEI -pubout -out id-vault-public-key.pem';
+                } elseif (strpos($pem, 'BEGIN PUBLIC KEY') !== false) {
+                    $why .= ' (' . $err . ')';
+                }
+                ih_fail($why);
             }
             $fp = vault_fingerprint($pem);
             if ($sub === 'fingerprint') {
@@ -313,15 +414,15 @@ try {
             $existing = vault_public_key_pem();
             if ($existing !== '') {
                 if (admin_vault_same_key($existing, $pem)) {
-                    ih_out('OK', 'vault-key', 'unchanged ' . $fp);
+                    ih_out('OK', 'Tresor-Schlüssel', 'unverändert (' . $fp . ')');
                     break;
                 }
-                ih_out('FAIL', 'vault-key', 'Es ist bereits ein anderer Schluessel gespeichert (' . vault_fingerprint($existing) . '). Ein Austausch ist nur im Admin-Bereich moeglich (Passwort noetig; aeltere Fotos brauchen weiterhin den alten privaten Schluessel).');
+                ih_out('FAIL', 'Tresor-Schlüssel', 'Es ist bereits ein anderer Schlüssel gespeichert (' . vault_fingerprint($existing) . '). Ein Austausch ist nur im Admin-Bereich möglich (Passwort nötig; ältere Fotos brauchen weiterhin den alten privaten Schlüssel).');
                 exit(3);
             }
             vault_set_public_key($pem);
             audit('vault.public_key_set', 'vault', 'public_key', ['fingerprint' => $fp, 'replaced' => false, 'previous_fingerprint' => '', 'via' => 'installer']);
-            ih_out('OK', 'vault-key', 'set ' . $fp);
+            ih_out('OK', 'Tresor-Schlüssel', 'gespeichert, Fingerabdruck ' . $fp);
             break;
 
         /* ------------------------------------------------------------- vault-probe */
@@ -330,19 +431,25 @@ try {
             if ($driver === 'directory') {
                 $dir = admin_vault_archive_path();
                 if (!is_dir($dir)) {
-                    ih_out('FAIL', 'vault-probe', 'Das Archiv-Verzeichnis ' . $dir . ' existiert nicht (Speichermedium eingehaengt?).');
+                    ih_out('FAIL', 'Archiv-Test', 'Das Archiv-Verzeichnis ' . $dir . ' existiert nicht (Speichermedium eingehängt?).');
                     exit(1);
                 }
                 if (ih_inside_web_root($dir)) {
-                    ih_out('FAIL', 'vault-probe', 'Das Archiv-Verzeichnis liegt im Webroot: ' . $dir);
+                    ih_out('FAIL', 'Archiv-Test', 'Das Archiv-Verzeichnis liegt im Webroot: ' . $dir);
                     exit(1);
                 }
             } elseif (admin_vault_s3_missing() !== []) {
-                ih_out('FAIL', 'vault-probe', 'S3-Einstellungen unvollstaendig: ' . implode(', ', admin_vault_s3_missing()));
+                ih_out('FAIL', 'Archiv-Test', 'S3-Einstellungen unvollständig: ' . implode(', ', admin_vault_s3_missing()));
                 exit(1);
             }
             $r = admin_vault_probe();
-            ih_out($r['ok'] ? 'OK' : 'FAIL', 'vault-probe', ($driver === 's3' ? 'S3: ' : 'Verzeichnis: ') . $r['detail']);
+            $detail = $r['detail'];
+            if (!$r['ok'] && $driver === 's3' && preg_match('/\b(403|401)\b/', $detail) === 1) {
+                $detail .= ' – Zugangsdaten, Region oder Bucket-Rechte prüfen (Installer erneut starten und die S3-Angaben neu eingeben).';
+            } elseif (!$r['ok'] && $driver === 's3' && preg_match('/\b404\b/', $detail) === 1) {
+                $detail .= ' – gibt es den Bucket? Stimmt die Path-Style-Einstellung?';
+            }
+            ih_out($r['ok'] ? 'OK' : 'FAIL', 'Archiv-Test', ($driver === 's3' ? 'S3: ' : 'Verzeichnis: ') . $detail);
             exit($r['ok'] ? 0 : 1);
 
         /* ------------------------------------------------------------- report */
@@ -362,10 +469,10 @@ try {
         case 'mail-test':
             $to = (string) ($argv[2] ?? '');
             if (!v_email($to)) {
-                ih_fail('Ungueltige Empfaengeradresse.', 2);
+                ih_fail('Ungültige Empfängeradresse.', 2);
             }
             $sent = send_mail($to, 'Installer test', "This is a test message from the installer of " . (string) config('site_name') . ".\n\nIf you can read this, outgoing mail works. (Check the spam folder too.)");
-            ih_out($sent ? 'OK' : 'FAIL', 'mail-test', $sent ? 'Von PHP angenommen (Zustellung bitte im Postfach pruefen)' : 'mail() hat die Nachricht abgelehnt - siehe Server-Log');
+            ih_out($sent ? 'OK' : 'FAIL', 'Test-E-Mail', $sent ? 'von PHP angenommen – Zustellung bitte im Postfach prüfen (auch Spam)' : 'mail() hat die Nachricht abgelehnt – siehe Server-Log');
             exit($sent ? 0 : 1);
 
         default:

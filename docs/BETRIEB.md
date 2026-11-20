@@ -79,32 +79,46 @@ bash installer.sh --help     # alle Optionen, auch für den unbeaufsichtigten Be
 ```
 
 Der Installer erledigt die Schritte 1, 3 und 5 unten (und Teile von 4) und kann **gefahrlos erneut gestartet** werden: er ergänzt nur,
-was fehlt, ersetzt nie den Datenschlüssel, ein bestehendes Admin-Konto oder einen gespeicherten Tresor-Schlüssel.
+was fehlt, ersetzt nie den Datenschlüssel, ein bestehendes Admin-Konto, einen gespeicherten Tresor-Schlüssel oder ein Archiv, in dem
+schon Ausweisdateien liegen. Bevor er etwas ändert, zeigt er eine Zusammenfassung; bei „n“ bleibt alles unverändert.
 
 - **Prüft** PHP-Version und Erweiterungen (pdo_sqlite, gd mit JPEG, mbstring, openssl, sodium …), `mail()` und den Webserver.
   Hinweis: geprüft wird das PHP der Kommandozeile; das des Webservers kann abweichen (danach Admin → Settings → System checks).
-- **Datenverzeichnis:** schlägt einen Ordner **außerhalb des Webroots** vor (z. B. `../tcd-studio-data`) und schreibt den Pfad in
-  `app/data-dir.local` – so finden Webserver, Cronjob und Kommandozeile die Daten ohne weitere Serverkonfiguration (die Umgebungsvariable
-  `TCD_DATA_DIR` hat weiterhin Vorrang). Eine bestehende Installation in `data/` wird auf Wunsch dorthin **verschoben**; zurück in den
-  Webroot wird nie verschoben.
-- **Rechte:** als root werden Datenverzeichnis, `legal/`, `sitemap.xml` und das Archiv dem Webserver-Benutzer (z. B. `www-data`) zugeordnet;
-  das Webroot-Verzeichnis selbst ebenfalls, falls PHP dort sonst `sitemap.xml` nicht ersetzen kann (nur das Verzeichnis, nicht die Dateien).
-- **Anwendung:** Datenbank, Datenschlüssel, `site_url`, Postfach-Adressen, ggf. Proxy-Modus (`--behind-proxy`).
-- **Admin-Konto** (Passwort verdeckt eingeben, aus Datei/Umgebungsvariable oder zufällig erzeugen; es wird nie protokolliert).
-- **Ausweis-Tresor:** öffentlichen Schlüssel aus Datei übernehmen, hier erzeugen (dann den privaten Schlüssel sofort herunterladen;
-  der Installer löscht ihn nach Bestätigung „GESICHERT“ vom Server) oder – empfohlen – später im Browser auf der Vault-Seite erzeugen.
-  Archiv: Verzeichnis (außerhalb des Webroots; Warnung, wenn es auf demselben Dateisystem wie die Website liegt) oder S3
-  (Zugangsdaten nur verdeckt oder über `TCD_S3_ACCESS_KEY`/`TCD_S3_SECRET_KEY`). Danach läuft automatisch der Archiv-Test.
-- **Cronjob** für `tools/maintenance.php` (täglich; als root in der crontab des Webserver-Benutzers). Ohne `crontab` wird die Zeile
-  zum Eintragen im Hosting-Panel angezeigt.
+- **Als root** läuft jeder PHP-Aufruf als Webserver-Benutzer (z. B. `www-data`, automatisch erkannt oder `--web-user`), nie als root.
+  Datenverzeichnis, Archiv, `legal/`, die `legal-notice-*`-Ordner und `sitemap.xml` gehören danach diesem Benutzer – das Webroot-Verzeichnis
+  selbst und die übrigen Dateien der Website **nicht** (PHP kann `index.html`, `.htaccess` usw. also nicht verändern).
+  Als normaler Benutzer (Shared-Hosting) wird angenommen, dass PHP unter demselben Benutzer läuft; sonst `--web-group GRUPPE`.
+- **Datenverzeichnis:** schlägt einen Ordner **außerhalb des Webroots** vor (z. B. `../tcd-studio-data`; nur neue oder leere Ordner werden
+  angenommen) und schreibt den Pfad in `app/data-dir.local`. So finden Webserver, Cronjob und Kommandozeile die Daten ohne weitere
+  Serverkonfiguration (die Umgebungsvariable `TCD_DATA_DIR` hat weiterhin Vorrang). In `data/` bleibt die Markierung `data/.tcd-moved`.
+  **Sicherheitsnetz:** Fehlt das Verzeichnis aus `app/data-dir.local` (Speichermedium nicht eingehängt) oder fehlt der Zeiger, obwohl
+  `data/.tcd-moved` existiert (z. B. bei einem Update gelöscht), verweigert die Anwendung den Dienst (Fehler 500), statt still eine leere
+  Installation mit neuem Schlüssel anzulegen. Abhilfe: Speichermedium einhängen bzw. den Pfad wieder in `app/data-dir.local` schreiben.
+  Wer Updates per `rsync --delete` o. Ä. einspielt, muss `app/data-dir.local` ausnehmen.
+- **Umzug:** Liegt eine bestehende Installation in `data/` im Webroot, bietet der Installer an, sie nach außen zu verschieben (unbeaufsichtigt:
+  `--data-dir PFAD`). Ablauf: altes Verzeichnis schreibschützen (die Website ist kurz nur lesbar), alles kopieren und vergleichen, Zeiger
+  umstellen, alte Kopie löschen. Bricht der Umzug ab, bleibt das Original unverändert; ein erneuter Start setzt ihn fort. In den Webroot
+  zurück wird nie verschoben.
+- **Anwendung:** Datenbank, Datenschlüssel, `site_url`, Postfach-Adressen, Proxy-Einstellung (`--behind-proxy` / `--no-proxy`).
+- **Admin-Konto** (Passwort verdeckt eingeben, aus Datei oder Umgebungsvariable, oder zufällig erzeugen – dann wird es direkt nach dem
+  Anlegen einmal angezeigt; es wird nie protokolliert). Geheimnisse aus Umgebungsvariablen werden sofort aus der Umgebung entfernt.
+- **Archiv:** Verzeichnis (außerhalb des Webroots, neu oder leer; Hinweis, wenn es auf demselben Dateisystem wie die Website liegt) oder S3
+  (nur `https://`; Zugangsdaten verdeckt oder über `TCD_S3_ACCESS_KEY`/`TCD_S3_SECRET_KEY`). Danach läuft automatisch der Archiv-Test.
+  Liegen im bisherigen Archiv schon Ausweisdateien, verweigert der Installer einen Wechsel (sonst wären sie unauffindbar).
+- **Tresor-Schlüssel:** empfohlen „später im Browser“ (Vault-Seite). Alternativ öffentlichen Schlüssel aus Datei übernehmen oder hier erzeugen:
+  dann liegt der private Schlüssel kurz in `~/tcd-vault-key/` (nur für root bzw. den aufrufenden Benutzer lesbar) – herunterladen,
+  „GESICHERT“ eintippen, der Installer löscht ihn. Unbeaufsichtigt bleibt er liegen und der Installer meldet das als offenes Problem.
+- **Cronjob** für `tools/maintenance.php` (täglich; als root in der crontab des Webserver-Benutzers; je Website ein eigener Eintrag).
+  Ohne `crontab` wird die Zeile zum Eintragen im Hosting-Panel angezeigt.
 - **Schutz:** Regel in der `.htaccess` des Webroots, die `installer.sh` sperrt; bei nginx/Caddy werden die nötigen Sperr-Regeln angezeigt.
-  Abschlusstest über HTTP: Startseite, Portal, Admin und dass `app/`, `data/`, `tools/`, `backend/`, `docs/` und `installer.sh`
-  **nicht** abrufbar sind (mit Testdateien, die sofort wieder gelöscht werden).
+  Abschlusstest über HTTP: Startseite, Portal, Admin – und dass `app/`, `tools/`, `backend/`, `docs/`, ggf. `data/` und `installer.sh`
+  **nicht** abrufbar sind (Testdateien werden sofort wieder gelöscht).
 - **Abschlussbericht** mit offenen Punkten (Postfächer, Zwei-Faktor, Backups, privater Schlüssel …). Protokoll ohne Passwörter:
-  `<Datenverzeichnis>/install.log`. Exit-Code 0 = alles erledigt, 3 = fertig mit offenen Problemen, 1 = Abbruch.
+  `~/tcd-installer.log`. Exit-Code 0 = alles erledigt, 3 = fertig mit offenen Problemen, 1 = Abbruch (nichts Unfertiges), 130 = abgebrochen.
 
 Was der Installer **nicht** kann: Postfächer und DNS/HTTPS einrichten, Zwei-Faktor-Anmeldung aktivieren, den privaten Schlüssel für dich
-aufbewahren, die Rechtstexte prüfen. Ohne SSH-Zugang gilt der manuelle Weg:
+aufbewahren, die Rechtstexte prüfen. **Sicherung:** das Datenverzeichnis (Pfad steht in `app/data-dir.local`) vollständig sichern –
+Datenbank und `config.local.php` immer zusammen. Ohne SSH-Zugang gilt der manuelle Weg:
 
 ## Erste Inbetriebnahme (manuell)
 
@@ -127,8 +141,8 @@ aufbewahren, die Rechtstexte prüfen. Ohne SSH-Zugang gilt der manuelle Weg:
 **Sicherheit:** `data/` enthält die Datenbank (mit privaten Kundendaten!). Idealerweise außerhalb des Webroots
 ablegen (`installer.sh` erledigt das; sonst Umgebungsvariable `TCD_DATA_DIR` oder eine Zeile mit dem absoluten Pfad in
 `app/data-dir.local`). Mindestens muss `data/.htaccess`
-greifen (Apache) – die Datenbankdatei hat einen zufälligen Namen. Regelmäßig sichern: `data/` **einschließlich
-`data/config.local.php`** (Datenbank und Schlüssel gehören zusammen, siehe unten) und `legal/`.
+greifen (Apache) – die Datenbankdatei hat einen zufälligen Namen. Regelmäßig sichern: das Datenverzeichnis (`data/` oder der Pfad aus `app/data-dir.local`) **einschließlich
+`config.local.php`** (Datenbank und Schlüssel gehören zusammen, siehe unten) und `legal/`.
 
 ## Ausweisprüfung und Löschung
 
