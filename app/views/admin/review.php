@@ -35,6 +35,8 @@ $privLabels = [
     <dl class="pf-kv">
       <dt><?= h(__('Page')) ?></dt><dd><a href="/admin/profile.php?id=<?= (int) $profile['id'] ?>">/legal/<?= h($profile['slug']) ?>/</a></dd>
       <dt><?= h(__('Type')) ?></dt><dd><?= h((string) (imprint_kinds()[$pub['kind'] ?? ''] ?? ($pub['kind'] ?? ''))) ?></dd>
+      <dt><?= h(__('Package')) ?></dt><dd id="review-package"><?= admin_package_html($profile, package_of_profile($profile)) /* escaped HTML from the helper */ ?>
+        <a class="pf-small" href="/admin/profile.php?id=<?= (int) $profile['id'] ?>#package"><?= h(__('Change')) ?></a></dd>
       <dt><?= h(__('Owner')) ?></dt>
       <dd><?php if ($owner): ?><a href="/admin/customer.php?id=<?= (int) $owner['id'] ?>"><?= h($owner['name']) ?></a><br><?= h($owner['email']) ?>
         <?= $owner['email_verified_at'] ? '<span class="pf-badge pf-badge--ok">' . h(__('e-mail verified')) . '</span>' : '<span class="pf-badge pf-badge--pending">' . h(__('e-mail not verified')) . '</span>' ?>

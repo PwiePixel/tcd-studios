@@ -89,6 +89,27 @@ if (is_post()) {
         redirect($self, ['ok' => $newOwnerId === null ? __('The owner was removed.') : __('The owner was changed.')]);
     }
 
+    if ($action === 'change_package') {
+        $packageId = post_int('package_id');
+        $package = package_get($packageId);
+        if ($package === null) {
+            redirect($self . '#package', ['error' => __('Please choose a package.')]);
+        }
+        $before = package_of_profile($profile);
+        profile_set_package($id, $packageId);
+        audit('profile.package', 'profile', $id, ['slug' => $slug, 'from' => $profile['package_id'] !== null && $before !== null ? $before['slug'] : null,
+            'to' => $package['slug'], 'by' => 'admin']);
+        $msg = ['ok' => sprintf(__('The package was changed to "%s".'), (string) $package['name'])];
+        if ($owner !== null) {
+            $ids = package_ids_of_owner((int) $owner['id']);
+            $limit = package_limit_for($ids);
+            if (count($ids) > $limit) {
+                $msg['error'] = sprintf(__('Note: the owner now has %1$d imprint profiles, but his packages include only %2$d. He cannot create more profiles until this is resolved.'), count($ids), $limit);
+            }
+        }
+        redirect($self . '#package', $msg);
+    }
+
     if ($action === 'change_slug') {
         $new = mb_strtolower(post_str('slug', 60), 'UTF-8');
         if ($new === $slug) {
@@ -172,4 +193,6 @@ render_view('admin/profile', [
     'history' => $history,
     'reviewers' => admin_reviewer_names($history),
     'isLive' => $isLive,
+    'package' => package_of_profile($profile),
+    'packages' => packages_all(),
 ]);

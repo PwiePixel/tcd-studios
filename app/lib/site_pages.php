@@ -12,15 +12,81 @@ const SITE_CSS = ['/css/site.css'];
 
 /* ------------------------------------------------------------------ imprint protection */
 
+/**
+ * Pricing cards of the active packages for the public page, or null if the database is unavailable.
+ *
+ * @return array<int,array<string,mixed>>|null
+ */
+function site_package_cards(): ?array
+{
+    try {
+        $packages = packages_all(true);
+    } catch (Throwable $e) {
+        error_log('packages (public page): ' . $e->getMessage());
+        return null;
+    }
+    $cards = [];
+    foreach ($packages as $p) {
+        $year = $p['price_year_cents'];
+        $month = $p['price_month_cents'];
+        $amount = '';
+        $suffix = '';
+        $alt = '';
+        if ($year !== null) {
+            $amount = sprintf(__('EUR %s'), package_money($year));
+            $suffix = __('/ month billed yearly');
+            $alt = $month !== null ? sprintf(__('or EUR %s monthly'), package_money($month)) : '';
+        } elseif ($month !== null) {
+            $amount = sprintf(__('EUR %s'), package_money($month));
+            $suffix = __('/ month');
+        }
+        $cards[] = [
+            'slug' => (string) $p['slug'], 'name' => (string) $p['name'], 'tagline' => (string) $p['tagline'], 'badge' => (string) $p['badge'],
+            'amount' => $amount, 'suffix' => $suffix, 'alt' => $alt, 'features' => $p['features'], 'extras' => $p['extras'],
+            'href' => '/portal/register.php?package=' . rawurlencode((string) $p['slug']),
+        ];
+    }
+    return $cards;
+}
+
 function site_page_imprint_protection(): void
 {
+    $cards = site_package_cards();
+    try {
+        $note = $cards ? packages_note() : '';
+    } catch (Throwable $e) {
+        $note = PACKAGES_NOTE_DEFAULT;
+    }
     site_render([
         'title'       => 'Imprint Protection for Creators - TCD-Studio/Agency',
         'description' => 'Imprint Protection for all creators: a legally sound imprint on tcd-studio.de with the management address of TCD-Studio/Agency instead of your private address. Our Terms (AGB) apply. Shops on request only.',
         'canonical'   => '/imprint-protection/',
         'css'         => SITE_CSS,
-        'content'     => render_partial('site/imprint-protection', ['imprintMail' => (string) config('mail.imprint')]),
+        'content'     => render_partial('site/imprint-protection', [
+            'imprintMail' => (string) config('mail.imprint'),
+            'packages'    => render_partial('site/packages', ['cards' => (array) $cards, 'note' => $note]),
+            'hasPackages' => (bool) $cards,
+        ]),
     ]);
+}
+
+/** Teaser line of the Imprint Protection card on /services/ ('' when no package is active). */
+function site_packages_teaser(): string
+{
+    try {
+        $packages = packages_all(true);
+    } catch (Throwable $e) {
+        return '';
+    }
+    if ($packages === []) {
+        return '';
+    }
+    $names = [];
+    foreach ($packages as $p) {
+        $names[] = (string) $p['name'];
+    }
+    $from = packages_from_price($packages);
+    return sprintf(__('Packages: %s'), implode(', ', $names)) . ($from !== null ? ' – ' . sprintf(__('from EUR %s per month.'), package_money($from)) : '.');
 }
 
 /* ------------------------------------------------------------------ services */
@@ -69,6 +135,7 @@ function site_page_services(): void
             'name' => (string) $s['name'], 'summary' => (string) $s['summary'], 'details' => (string) $s['details'],
             'availability' => (string) $s['availability'], 'badge' => site_availability_label((string) $s['availability']),
             'href' => $href, 'label' => $label,
+            'teaser' => (string) $s['slug'] === 'imprint-protection' && (string) $s['availability'] !== 'coming_soon' ? site_packages_teaser() : '',
         ];
     }
     site_render([

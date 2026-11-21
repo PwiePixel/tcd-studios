@@ -2,6 +2,7 @@
 /**
  * @var array<string,mixed> $profile @var array<string,mixed>|null $owner @var string $name @var array<string,mixed>|null $latest
  * @var array<int,array<string,mixed>> $history @var array<int,string> $reviewers @var bool $isLive
+ * @var array<string,mixed>|null $package @var array<int,array<string,mixed>> $packages
  */
 defined('TCD_APP') || exit;
 $id = (int) $profile['id'];
@@ -41,6 +42,7 @@ foreach ($history as $r) {
       <dd><?php if ($owner): ?><a href="/admin/customer.php?id=<?= (int) $owner['id'] ?>"><?= h($owner['name']) ?></a> &lt;<?= h($owner['email']) ?>&gt;
         <?php else: ?><span class="pf-muted"><?= h(__('no owner assigned')) ?></span><?php endif; ?></dd>
       <dt><?= h(__('Identity')) ?></dt><dd><?= !empty($profile['identity_verified']) ? '<span class="pf-badge pf-badge--ok">' . h(__('verified')) . '</span>' : '<span class="pf-badge pf-badge--pending">' . h(__('not verified')) . '</span>' ?></dd>
+      <dt><?= h(__('Package')) ?></dt><dd id="profile-package"><?= admin_package_html($profile, $package) /* escaped HTML from the helper */ ?></dd>
       <dt><?= h(__('Created')) ?></dt><dd><?= h(fmt_time((int) $profile['created_at'])) ?></dd>
       <dt><?= h(__('Published')) ?></dt><dd><?= h(fmt_time($profile['published_at'] !== null ? (int) $profile['published_at'] : null)) ?></dd>
     </dl>
@@ -112,6 +114,20 @@ foreach ($history as $r) {
         <div class="pf-help"><?= h(__('Leave empty to remove the owner.')) ?></div></div>
       <button class="pf-btn" type="submit"><?= h(__('Save owner')) ?></button>
     </form>
+<?php if ($packages !== []): ?>
+    <form class="pf-form pf-action" method="post" action="<?= h($self) ?>#package" id="package">
+      <?= csrf_field() ?><input type="hidden" name="action" value="change_package">
+      <h3><?= h(__('Change package')) ?></h3>
+      <div class="pf-field"><label for="package_id"><?= h(__('Package')) ?></label>
+        <select id="package_id" name="package_id">
+<?php foreach ($packages as $pk): ?>
+          <option value="<?= (int) $pk['id'] ?>"<?= $package !== null && $package['id'] === $pk['id'] ? ' selected' : '' ?>><?= h($pk['name']) ?><?= $pk['active'] === 1 ? '' : ' (' . h(__('inactive')) . ')' ?> – <?= h(sprintf(__('%d profiles'), $pk['max_profiles'])) ?></option>
+<?php endforeach; ?>
+        </select>
+        <div class="pf-help"><?= h(__('Takes effect immediately, no review needed. The owner is not notified.')) ?></div></div>
+      <button class="pf-btn" type="submit"><?= h(__('Save package')) ?></button>
+    </form>
+<?php endif; ?>
     <form class="pf-form pf-action" method="post" action="<?= h($self) ?>">
       <?= csrf_field() ?><input type="hidden" name="action" value="change_slug">
       <h3><?= h(__('Change page name')) ?></h3>

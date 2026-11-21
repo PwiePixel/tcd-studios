@@ -3,6 +3,14 @@ declare(strict_types=1);
 
 require dirname(__DIR__) . '/app/bootstrap.php';
 session_boot('admin');
+// Signed out: /admin/ itself is the sign-in page (no "login.php" in the address).
+if (auth_current_user() === null) {
+    if (rtrim((string) parse_url((string) ($_SERVER['REQUEST_URI'] ?? '/admin/'), PHP_URL_PATH), '/') !== '/admin') {
+        redirect('/admin/');                      // e.g. /admin/index.php -> the clean address
+    }
+    admin_login_page();
+    exit;
+}
 $admin = auth_require('admin');
 
 $stats = admin_dashboard_stats();

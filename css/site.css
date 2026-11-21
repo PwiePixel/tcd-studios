@@ -85,6 +85,39 @@
 .site-row { display: grid; gap: 0 1rem; grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .site-hp { position: absolute; left: -10000px; width: 1px; height: 1px; overflow: hidden; }
 
+/* Packages (pricing cards on /imprint-protection/): stacked on mobile, 3 in a row on desktop */
+.site-packages { display: grid; gap: 1.5rem; grid-template-columns: minmax(0, 1fr); margin: 2rem 0 1rem; align-items: stretch; }
+.site-package { position: relative; display: flex; flex-direction: column; min-width: 0; background: #fff; padding: 2rem 1.5rem 1.5rem; border-top: 4px solid #000; box-shadow: 5px 5px 20px rgba(0, 0, 0, 0.15); }
+.site-package--featured { border-top-color: #ff4747; box-shadow: 5px 5px 24px rgba(255, 71, 71, 0.28); }
+.site-package-badge { position: absolute; top: -0.95rem; left: 50%; transform: translateX(-50%); padding: 0.25rem 0.9rem; background: #ff4747; color: #fff; font-size: 0.78rem; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; white-space: nowrap; }
+.site-page .site-package-name { margin: 0 0 0.35rem; font-size: 1.5rem; font-weight: 700; line-height: 1.2; text-align: center; }
+.site-page .site-package-tagline { margin: 0 0 1rem; text-align: center; color: #555; font-size: 0.95rem; }
+.site-page .site-package-price { margin: 0.25rem 0 0.15rem; text-align: center; line-height: 1.3; }
+.site-package-amount { display: block; font-size: 2rem; font-weight: 700; color: #ff4747; }
+.site-package-per { font-size: 0.9rem; color: #333; }
+.site-page .site-package-alt { margin: 0 0 1.25rem; text-align: center; font-size: 0.9rem; color: #555; }
+.site-page .site-package-features,
+.site-page .site-package-extras { list-style: none; margin: 0 0 1rem; padding: 0 0 0 1.25rem; }
+.site-page .site-package-features > li,
+.site-page .site-package-extras > li { padding: 0.4rem 0; border-bottom: 1px solid #eee; font-size: 0.95rem; line-height: 1.45; overflow-wrap: anywhere; }
+.site-page .site-package-features > li::before,
+.site-page .site-package-extras > li::before { width: 1.25rem; margin-left: -1.25rem; }     /* the theme's red arrow (FontAwesome) */
+.site-page .site-package-extras > li::before { content: "+"; font-family: inherit; font-weight: 700; color: #555; }
+.site-page .site-package-extras-title { margin: 0.5rem 0 0.25rem; font-size: 0.8rem; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: #555; }
+.site-page .site-package-cta { margin: auto 0 0; padding-top: 1rem; text-align: center; }
+.site-package-cta .button { display: block; width: 100%; }
+.site-package:not(.site-package--featured) .site-package-cta .button { background: #000; border-color: #000; }
+.site-package:not(.site-package--featured) .site-package-cta .button:hover { background: #ff4747; border-color: #ff4747; }
+.site-page .site-packages-note { max-width: 44rem; margin: 1rem auto 0; text-align: center; font-size: 0.9rem; color: #555; }
+.site-page .site-card-teaser { font-weight: 600; }
+
+@media screen and (min-width: 40rem) and (max-width: 61.9375rem) {
+  .site-packages { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media screen and (min-width: 62rem) {
+  .site-packages { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+
 @media screen and (max-width: 35.9375rem) {
   .site-row { grid-template-columns: minmax(0, 1fr); }
   .site-lead { font-size: 1.05rem; }

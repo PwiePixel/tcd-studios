@@ -43,11 +43,45 @@ function portal_owned_profile(int $id, array $user): array
     return $profile;
 }
 
-/** Number of profiles the user owns and the allowed maximum. @return array{0:int,1:int} */
+/**
+ * Number of profiles the user owns and the highest maximum he can reach (best active package for a new profile,
+ * never more than config max_profiles_per_user). The exact check per package is package_limit_error().
+ *
+ * @return array{0:int,1:int}
+ */
 function portal_profile_limit(int $userId): array
 {
     $row = db_one('SELECT COUNT(*) AS n FROM profiles WHERE owner_id = ?', [$userId]);
-    return [(int) ($row['n'] ?? 0), max(1, (int) config('max_profiles_per_user', 5))];
+    return [(int) ($row['n'] ?? 0), package_reachable_limit($userId)];
+}
+
+/**
+ * Package to preselect for a new profile: ?package= (active), then the choice remembered from the
+ * registration (session), then the default package.
+ *
+ * @return array<string,mixed>|null
+ */
+function portal_package_preselect(): ?array
+{
+    $p = package_active_by_slug(get_str('package', 40));
+    if ($p === null && isset($_SESSION['package_choice']) && is_string($_SESSION['package_choice'])) {
+        $p = package_active_by_slug($_SESSION['package_choice']);
+    }
+    if ($p === null) {
+        $active = packages_all(true);
+        $p = $active[0] ?? null;
+    }
+    return $p;
+}
+
+/** Remember a package chosen on the public page (register.php?package=…) for the next profile. */
+function portal_package_remember(string $slug): ?array
+{
+    $p = package_active_by_slug($slug);
+    if ($p !== null && session_status() === PHP_SESSION_ACTIVE) {
+        $_SESSION['package_choice'] = $p['slug'];
+    }
+    return $p;
 }
 
 /**
@@ -73,6 +107,7 @@ function portal_profile_summary(array $profile): array
         'url'            => $isLive ? imprint_public_url((string) $profile['slug']) : '',
         'update_pending' => $open !== null && $open['state'] === 'submitted' && $profile['live_revision_id'] !== null,
         'identity'       => portal_identity_state($profile),
+        'package'        => package_of_profile($profile),
     ];
 }
 
@@ -107,7 +142,7 @@ function portal_error_fields(array $errors): string
 {
     $labels = portal_private_labels() + [
         'display_name' => __('Public name'), 'kind' => __('Type'), 'purpose' => __('Business purpose'),
-        'links' => __('Links'), 'contact_email' => __('Contact e-mail'),
+        'links' => __('Links'), 'contact_email' => __('Contact e-mail'), 'package' => __('Package'),
     ];
     $names = [];
     foreach (array_keys($errors) as $field) {

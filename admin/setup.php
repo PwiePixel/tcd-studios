@@ -47,7 +47,7 @@ if ($token !== '' && is_post()) {
                 });
                 @unlink(admin_setup_token_file());
                 audit('admin.setup_completed', 'user', $uid, [], $uid);
-                redirect('/admin/login.php', ['ok' => __('The admin account was created. Please sign in.')]);
+                redirect('/admin/', ['ok' => __('The admin account was created. Please sign in.')]);
             } catch (RuntimeException $e) {
                 abort(404);
             } catch (InvalidArgumentException $e) {

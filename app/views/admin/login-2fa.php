@@ -13,6 +13,6 @@ defined('TCD_APP') || exit;
       <input type="text" id="code" name="code" required maxlength="20" inputmode="numeric" autocomplete="one-time-code" autocapitalize="off" spellcheck="false" autofocus>
     </div>
     <div class="pf-actions"><button class="pf-btn pf-btn--primary" type="submit"><?= h(__('Verify')) ?></button>
-      <a class="pf-btn pf-btn--ghost" href="/admin/login.php"><?= h(__('Cancel')) ?></a></div>
+      <a class="pf-btn pf-btn--ghost" href="/admin/"><?= h(__('Cancel')) ?></a></div>
   </form>
 </div>

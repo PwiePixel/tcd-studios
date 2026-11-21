@@ -319,6 +319,67 @@ CREATE INDEX idx_deletion_status ON deletion_requests(status, created_at);
                 }
             }
         },
+        7 => function (PDO $pdo): void {
+            // Imprint Protection packages ("plans", editable in admin/packages.php) and the package of each profile.
+            $pdo->exec("
+CREATE TABLE packages (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  slug TEXT NOT NULL UNIQUE,
+  name TEXT NOT NULL,
+  tagline TEXT NOT NULL DEFAULT '',
+  price_month_cents INTEGER,
+  price_year_cents INTEGER,
+  features_json TEXT NOT NULL DEFAULT '[]',
+  extras_json TEXT NOT NULL DEFAULT '[]',
+  badge TEXT NOT NULL DEFAULT '',
+  max_profiles INTEGER NOT NULL DEFAULT 1,
+  sort_order INTEGER NOT NULL DEFAULT 100,
+  active INTEGER NOT NULL DEFAULT 1,
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL
+);
+CREATE INDEX idx_packages_active ON packages(active, sort_order);
+");
+            $pdo->exec('ALTER TABLE profiles ADD COLUMN package_id INTEGER REFERENCES packages(id) ON DELETE SET NULL');
+            $t = time();
+            $ins = $pdo->prepare('INSERT INTO packages (slug,name,tagline,price_month_cents,price_year_cents,features_json,extras_json,badge,max_profiles,sort_order,active,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,1,?,?)');
+            // Prices in cents (gross for consumers). Calculated so that every package covers payment fees, VAT and the manual work
+            // (identity check via the setup fee, letters via per-item fees); edit them in the admin panel (Packages).
+            $ins->execute(['starter', 'Starter', 'Your own imprint without your private address.', 590, 450, json_str([
+                'Imprint page on tcd-studio.de/legal/<name>',
+                'Our management address instead of your private address (serviceable address, German: "ladungsfähige Anschrift")',
+                'One-time identity check',
+                '1 imprint profile with up to 12 links',
+                'Official deliveries (court/authority letters) are always accepted, scanned and sent to you by e-mail',
+            ]), json_str([
+                'One-time setup incl. identity check: EUR 9.90',
+                'Scan of other letters: EUR 1.99 per letter',
+                'Forwarding of an original letter by post: EUR 2.50 + postage',
+            ]), '', 1, 10, $t, $t]);
+            $ins->execute(['creator', 'Creator', 'For creators with several channels or projects.', 990, 790, json_str([
+                'Everything in Starter',
+                'Up to 3 imprint profiles (e.g. several channels or projects)',
+                '5 letter scans per month included',
+                'Faster review (within 24 hours)',
+            ]), json_str([
+                'One-time setup incl. identity check: EUR 4.90',
+                'Further scans: EUR 0.99 per letter',
+                'Forwarding of an original letter by post: EUR 1.90 + postage',
+            ]), 'Most popular', 3, 20, $t, $t]);
+            $ins->execute(['pro', 'Pro', 'For professionals, shops and teams.', 1990, 1590, json_str([
+                'Everything in Creator',
+                'Up to 5 imprint profiles',
+                '20 letter scans per month included',
+                '2 original letters per month forwarded by post (postage extra)',
+                'Address may also be used on printed products (books, merchandise)',
+                'Priority support',
+                'No setup fee',
+            ]), json_str([
+                'Further scans: EUR 0.49 per letter',
+                'Further forwarding of an original letter: EUR 0.99 + postage',
+            ]), '', 5, 30, $t, $t]);
+            $pdo->prepare('INSERT OR IGNORE INTO settings (k, v) VALUES (?, ?)')->execute(['packages.note', PACKAGES_NOTE_DEFAULT]);
+        },
     ];
 }
 

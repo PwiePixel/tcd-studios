@@ -20,7 +20,7 @@ if (is_post()) {
     } else {
         $err = auth_reset_password($token, $pw, 'admin');
         if ($err === null) {
-            redirect('/admin/login.php', ['ok' => __('Your password was changed. Please sign in.')]);
+            redirect('/admin/', ['ok' => __('Your password was changed. Please sign in.')]);
         }
         $error = $err;
     }

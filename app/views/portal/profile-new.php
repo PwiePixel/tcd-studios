@@ -1,5 +1,8 @@
 <?php
-/** @var array<string,string> $values @var array<string,string> $errors @var bool $limitReached @var int $maxProfiles @var string $baseUrl */
+/**
+ * @var array<string,string> $values @var array<string,string> $errors @var bool $limitReached @var int $maxProfiles @var string $baseUrl
+ * @var array<int,array<string,mixed>> $packages
+ */
 defined('TCD_APP') || exit;
 ?>
 <p><a href="/portal/dashboard.php">&larr; <?= h(__('Dashboard')) ?></a></p>
@@ -44,6 +47,10 @@ defined('TCD_APP') || exit;
         <?= h(__('Leave empty to use a suggestion based on your public name. Lower-case letters, digits and hyphens only.')) ?></div>
       <?= portal_err($errors, 'slug') ?>
     </div>
+<?php if ($packages !== []): ?>
+    <?= render_partial('portal/_package-choice', ['packages' => $packages, 'selected' => $values['package'], 'errors' => $errors,
+        'help' => __('You can change the package of this imprint later.')]) ?>
+<?php endif; ?>
     <div class="pf-actions">
       <button class="pf-btn pf-btn--primary" type="submit"><?= h(__('Create and continue')) ?></button>
       <a class="pf-btn pf-btn--ghost" href="/portal/dashboard.php"><?= h(__('Cancel')) ?></a>

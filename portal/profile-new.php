@@ -11,6 +11,9 @@ portal_require_terms($user);         // creating a profile needs the current Ter
 $limitReached = $count >= $max;
 $values = ['display_name' => '', 'kind' => 'creator', 'slug' => ''];
 $errors = [];
+$packages = packages_all(true);
+$preselected = portal_package_preselect();
+$values['package'] = $preselected !== null ? (string) $preselected['slug'] : '';
 
 if (is_post()) {
     csrf_verify();
@@ -19,7 +22,23 @@ if (is_post()) {
     }
     $values['display_name'] = post_str('display_name', 200);
     $values['kind'] = post_str('kind', 20);
+    $values['package'] = post_str('package', 40);
     $slugInput = post_str('slug', 100);
+
+    // Package (required while packages are offered) and the profile limit of the customer's packages.
+    $package = null;
+    if ($packages !== []) {
+        $package = package_active_by_slug($values['package']);
+        if ($package === null) {
+            $errors['package'] = __('Please choose a package.');
+            $values['package'] = '';
+        } else {
+            $limitError = package_limit_error((int) $user['id'], null, $package['id']);
+            if ($limitError !== null) {
+                $errors['package'] = $limitError;
+            }
+        }
+    }
 
     // Imprint Protection is for creators only: customers can never create a shop (or "other") profile themselves.
     $creatorKinds = imprint_creator_kinds();
@@ -51,14 +70,28 @@ if (is_post()) {
 
     if ($errors === []) {
         try {
-            $pid = profile_create((int) $user['id'], $slug, $cleanPublic, imprint_private_defaults());
+            $pid = (int) db_transaction(static function () use ($user, $slug, $cleanPublic, $package) {
+                $id = profile_create((int) $user['id'], $slug, $cleanPublic, imprint_private_defaults());
+                if ($package !== null) {
+                    profile_set_package($id, $package['id']);
+                    // Re-check inside the write transaction: two parallel requests cannot both pass the limit.
+                    if (package_limit_error((int) $user['id'], $id, $package['id']) !== null) {
+                        throw new RangeException('profile limit');
+                    }
+                }
+                return $id;
+            });
+        } catch (RangeException $e) {
+            $errors['package'] = sprintf(__('You can have at most %d imprint profiles.'), package_reachable_limit((int) $user['id']));
+            $pid = 0;
         } catch (PDOException $e) {
             // Lost a race for the page name (UNIQUE constraint).
             $errors['slug'] = __('This page name is already taken.');
             $pid = 0;
         }
         if ($pid > 0) {
-            audit('profile.create', 'profile', $pid, ['slug' => $slug]);
+            audit('profile.create', 'profile', $pid, ['slug' => $slug, 'package' => $package !== null ? $package['slug'] : null]);
+            unset($_SESSION['package_choice']);
             redirect('/portal/profile-edit.php?id=' . $pid, ['ok' => __('Your imprint profile was created. Please fill in your details below.')]);
         }
     }
@@ -72,5 +105,6 @@ render_view('portal/profile-new', [
     'errors'       => $errors,
     'limitReached' => $limitReached,
     'maxProfiles'  => $max,
+    'packages'     => $packages,
     'baseUrl'      => site_url('/legal/'),
 ]);

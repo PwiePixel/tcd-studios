@@ -32,6 +32,9 @@ defined('TCD_APP') || exit;
 <?php if ($card['details'] !== '') : ?>
               <p><?= h($card['details']) ?></p>
 <?php endif; ?>
+<?php if (!empty($card['teaser'])) : ?>
+              <p class="site-card-teaser"><?= h($card['teaser']) ?> <a href="/imprint-protection/#packages"><?= h(__('Compare the packages')) ?></a></p>
+<?php endif; ?>
               <p class="site-card-cta"><a class="button" href="<?= h($card['href']) ?>"><?= h($card['label']) ?></a></p>
             </div>
 <?php endforeach; ?>

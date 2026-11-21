@@ -230,7 +230,7 @@ function auth_require(string $role): array
 {
     $user = auth_current_user();
     if ($user === null || $user['role'] !== $role) {
-        redirect($role === 'admin' ? '/admin/login.php' : '/portal/login.php');
+        redirect($role === 'admin' ? '/admin/' : '/portal/login.php');
     }
     return $user;
 }

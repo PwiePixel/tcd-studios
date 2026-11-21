@@ -17,7 +17,15 @@ if (is_post()) {
     $email = post_str('email', 300);
     $result = auth_login($email, portal_post_password('password'), 'customer');
     if ($result['ok'] && $result['user'] !== null) {
+        // Keep a package chosen before the registration (see register.php) across the fresh login session.
+        $packageChoice = isset($_SESSION['package_choice']) && is_string($_SESSION['package_choice']) ? $_SESSION['package_choice'] : '';
         auth_login_complete($result['user']);
+        if ($packageChoice !== '' && package_active_by_slug($packageChoice) !== null) {
+            $_SESSION['package_choice'] = $packageChoice;
+            if (profiles_by_owner((int) $result['user']['id']) === []) {
+                redirect('/portal/profile-new.php');     // fixed target: the package comes from the session
+            }
+        }
         redirect('/portal/dashboard.php');      // fixed target: no "next" parameter, so no open redirect
     }
     $error = $result['error'];

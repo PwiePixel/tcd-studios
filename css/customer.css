@@ -48,3 +48,22 @@
 }
 .pf-nowrap { white-space: nowrap; }
 .pf-card h2 .pf-badge { margin-left: 8px; vertical-align: middle; }
+
+/* Package choice (radio cards) in the imprint profile forms; works without JavaScript */
+.pf-packages-field { padding-bottom: 12px; }
+.pf-packages { display: grid; gap: 14px; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); margin: 6px 0 12px; }
+.pf-package { position: relative; display: flex; flex-direction: column; gap: 4px; min-width: 0; padding: 14px 16px; border: 2px solid var(--pf-line); border-radius: var(--pf-radius); background: #fff; cursor: pointer; font-weight: 400; text-transform: none; }
+.pf-package:hover { border-color: #bbb; }
+.pf-package.is-selected, .pf-package:has(input:checked) { border-color: var(--pf-accent); box-shadow: 0 0 0 1px var(--pf-accent); }
+.pf-package:focus-within { outline: 2px solid var(--pf-accent); outline-offset: 2px; }
+.pf-package-head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 4px; }
+.pf-package-head input[type=radio] { width: 1.1rem; height: 1.1rem; margin: 0; accent-color: var(--pf-accent); }
+.pf-package-name { font-size: 1.1rem; font-weight: 700; }
+.pf-package-price { font-weight: 700; color: var(--pf-accent-dark); }
+.pf-package-price2, .pf-package-tagline, .pf-package-limit { font-size: .85rem; color: #555; }
+.pf-package-limit { font-weight: 600; color: #222; margin-top: 4px; }
+.pf-package-feature, .pf-package-extra { display: block; position: relative; padding-left: 18px; font-size: .85rem; line-height: 1.4; overflow-wrap: anywhere; }
+.pf-package-feature::before { content: "\2713"; position: absolute; left: 0; color: var(--pf-accent); font-weight: 700; }
+.pf-package-extra::before { content: "+"; position: absolute; left: 2px; color: #555; font-weight: 700; }
+.pf-package-extras-title { margin-top: 6px; font-size: .75rem; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: #555; }
+.pf-packages-field .pf-help + .pf-help { margin-top: 4px; }

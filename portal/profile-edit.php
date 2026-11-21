@@ -48,6 +48,12 @@ foreach (array_keys(imprint_private_defaults()) as $field) {
 }
 $newLink = ['label' => '', 'url' => ''];
 $errors = [];
+// Package of this profile (profiles from before packages existed show the default package).
+$currentPackage = package_of_profile($profile);
+$explicitPackage = $profile['package_id'] !== null ? package_get((int) $profile['package_id']) : null;
+$packageChoices = package_choices($explicitPackage);
+$packageSlug = $currentPackage !== null ? (string) $currentPackage['slug'] : '';
+$newPackage = null;     // package to set when the form is saved
 
 if (!is_post() && get_int('check') === 1) {
     // After a refused submission: show what is missing, without changing anything.
@@ -78,6 +84,29 @@ if (is_post()) {
         $formPrivate[$field] = post_str($field, $field === 'notes' ? 3000 : 400);
     }
     $newLink = ['label' => post_str('new_link_label', 200), 'url' => post_str('new_link_url', 1000)];
+
+    // --- package (optional field here: a missing value keeps the current package) ----------------------------
+    $postedPackage = post_str('package', 40);
+    if ($postedPackage !== '') {
+        foreach ($packageChoices as $choice) {
+            if ($choice['slug'] === $postedPackage) {
+                $newPackage = $choice;
+            }
+        }
+        if ($newPackage === null) {
+            $errors['package'] = __('Please choose a package.');
+        } else {
+            $packageSlug = (string) $newPackage['slug'];
+            if ($profile['package_id'] === null || (int) $profile['package_id'] !== $newPackage['id']) {
+                $limitError = package_limit_error((int) $user['id'], $pid, $newPackage['id'], true);
+                if ($limitError !== null) {
+                    $errors['package'] = $limitError;
+                }
+            } else {
+                $newPackage = null;     // unchanged
+            }
+        }
+    }
 
     // --- link manager -------------------------------------------------------------------------------------
     $linkChanged = false;
@@ -127,7 +156,29 @@ if (is_post()) {
     }
 
     if ($errors === []) {
-        revision_save_draft($rid, $cleanPublic, $cleanPrivate);
+        try {
+            db_transaction(static function () use ($rid, $cleanPublic, $cleanPrivate, $newPackage, $user, $pid) {
+                if ($newPackage !== null) {
+                    // Re-check inside the write transaction: two parallel downgrades cannot both pass the limit.
+                    $limitError = package_limit_error((int) $user['id'], $pid, $newPackage['id'], true);
+                    if ($limitError !== null) {
+                        throw new RangeException($limitError);
+                    }
+                    profile_set_package($pid, $newPackage['id']);
+                }
+                revision_save_draft($rid, $cleanPublic, $cleanPrivate);
+            });
+        } catch (RangeException $e) {
+            $errors['package'] = $e->getMessage();
+        }
+    }
+
+    if ($errors === []) {
+        if ($newPackage !== null) {
+            if ($currentPackage === null || $currentPackage['id'] !== $newPackage['id']) {
+                audit('profile.package', 'profile', $pid, ['from' => $currentPackage !== null ? $currentPackage['slug'] : null, 'to' => $newPackage['slug'], 'by' => 'customer']);
+            }
+        }
         $links = $cleanPublic['links'];
         if ($action === 'save_submit') {
             if (!portal_terms_accepted($user)) {
@@ -177,6 +228,8 @@ render_view('portal/profile-edit', [
     'termsAccepted' => portal_terms_accepted($user),
     'identity'    => portal_identity_state($profile),
     'maxLinks'    => $maxLinks,
+    'packages'    => $packageChoices,
+    'packageSlug' => $packageSlug,
     'self'        => $self,
     'back'        => $back,
 ]);

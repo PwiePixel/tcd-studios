@@ -91,6 +91,15 @@ services(id,slug UNIQUE,name,summary,details,availability active|on_request|comi
 service_requests(id,service_slug,user_id NULL,name,email,payload_json,status new|in_progress|accepted|declined|done,admin_note,created_at,updated_at)
 audit_log(id,at,actor_id,actor_label,action,target_type,target_id,meta_json,ip)
 rate_limits(k PK,hits,window_start)  settings(k PK,v)
+packages(id,slug UNIQUE,name,tagline,price_month_cents NULL,price_year_cents NULL (pro Monat bei Jahreszahlung),features_json,extras_json,badge,max_profiles,sort_order,active,created_at,updated_at); profiles.package_id NULL
+
+**Pakete** (Migration 7, `app/lib/packages.php`): Starter/Creator/Pro als Preiskarten auf `/imprint-protection/` (`site/packages.php`, Styles in `css/site.css`),
+Teaser auf `/services/`, Hinweistext = Setting `packages.note`. Bearbeitung: `admin/packages.php` (anlegen, ändern, (de)aktivieren, löschen nur ohne Profile),
+Paketwechsel eines Profils in `admin/profile.php`. Kunde wählt pro Profil ein Paket (`portal/_package-choice.php` in profile-new/profile-edit; Vorauswahl
+`?package=` oder aus `register.php?package=<slug>` → Session `package_choice`). Profillimit: höchstes `max_profiles` der eigenen Profile, nie mehr als
+`config('max_profiles_per_user')` (`package_limit_error()`); Profile ohne Paket zählen als `package_default()` (erstes aktives Paket).
+Paketwechsel im Kundenbereich (profile-edit) wird nur abgelehnt, wenn er das aktuelle Limit SENKT und dann überschritten wäre
+(`$onlyRefuseDowngrade`), sonst könnten Kunden mit mehreren Altprofilen keinen Entwurf mehr speichern; Prüfung + Speichern in einer Transaktion.
 
 **Revision-Logik**: pro Profil höchstens EINE offene Revision (`draft`|`submitted`). Live bleibt die `live_revision_id`,
 bis ein Admin die nächste Revision freigibt (alte → `superseded`). Ablehnung: Kunde bearbeitet eine neue Entwurfs-Kopie.

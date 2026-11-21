@@ -1,5 +1,5 @@
 <?php
-/** @var array<string,string> $values @var array<string,string> $errors @var bool $done */
+/** @var array<string,string> $values @var array<string,string> $errors @var bool $done @var array<string,mixed>|null $package */
 defined('TCD_APP') || exit;
 ?>
 <div class="pf-narrow">
@@ -14,6 +14,13 @@ defined('TCD_APP') || exit;
   <div class="pf-card pf-card--accent">
     <h1><?= h(__('Create your account')) ?></h1>
     <p class="pf-muted"><?= h(__('With a free account, content creators and streamers can set up their protected imprint and follow its status.')) ?></p>
+    <?php if ($package !== null): ?>
+      <div class="pf-notice pf-notice--info" id="package-choice">
+        <?= h(sprintf(__('Your package: %s.'), (string) $package['name'])) ?>
+        <?= h(__('After you have confirmed your e-mail address and signed in, you create your imprint profile with this package.')) ?>
+        <a href="/imprint-protection/#packages"><?= h(__('Compare the packages')) ?></a>
+      </div>
+    <?php endif; ?>
     <?php if (!empty($errors['form'])): ?>
       <div class="pf-flash pf-flash--error" role="alert"><?= h($errors['form']) ?></div>
     <?php endif; ?>

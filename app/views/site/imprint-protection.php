@@ -3,7 +3,7 @@ declare(strict_types=1);
 
 defined('TCD_APP') || exit;
 
-/** @var string $imprintMail */
+/** @var string $imprintMail @var string $packages rendered pricing cards (site/packages) @var bool $hasPackages */
 ?>
         <?= site_headline('Imprint Protection for Creators', 'h2') ?>
 
@@ -24,6 +24,9 @@ defined('TCD_APP') || exit;
 
           <div class="site-actions">
             <a class="button button-large" href="/portal/register.php">Create account</a>
+<?php if ($hasPackages) : ?>
+            <a class="button button-large site-btn-ghost" href="#packages">See packages</a>
+<?php endif; ?>
             <a class="button button-large site-btn-ghost" href="/portal/login.php">Sign in</a>
             <a class="button button-large site-btn-ghost" href="/agb/">Terms and Conditions (AGB)</a>
           </div>
@@ -69,6 +72,8 @@ defined('TCD_APP') || exit;
               </div>
             </div>
           </div>
+
+<?= $packages /* escaped HTML from site/packages */ ?>
 
           <div class="site-section">
             <?= site_headline('What you control', 'h3') ?>
@@ -142,7 +147,8 @@ defined('TCD_APP') || exit;
                 <summary>Is Imprint Protection available to me, and what does it cost?</summary>
                 <p>
                   It is available to all creators. The Terms and Conditions (AGB) and the offer shown at sign-up
-                  apply. If you have questions, write to us at
+                  apply.<?php if ($hasPackages) : ?> You find our packages and their prices in the section
+                  <a href="#packages">Packages</a> above.<?php endif; ?> If you have questions, write to us at
                   <a href="mailto:<?= h($imprintMail) ?>"><?= h($imprintMail) ?></a>.
                 </p>
               </details>

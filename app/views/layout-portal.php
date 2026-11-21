@@ -6,7 +6,7 @@ $base = $isAdmin ? '/admin/' : '/portal/';
 $nav = $isAdmin
     ? [
         ['index.php', __('Dashboard')], ['reviews.php', __('Reviews')], ['profiles.php', __('Imprints')],
-        ['customers.php', __('Customers')], ['requests.php', __('Requests')], ['services.php', __('Services')], ['vault.php', __('ID vault')],
+        ['customers.php', __('Customers')], ['requests.php', __('Requests')], ['services.php', __('Services')], ['packages.php', __('Packages')], ['vault.php', __('ID vault')],
         ['audit.php', __('Audit log')], ['settings.php', __('Settings')],
     ]
     : [['dashboard.php', __('Dashboard')], ['services.php', __('Services')], ['account.php', __('Account')]];
@@ -24,7 +24,7 @@ $script = basename((string) ($_SERVER['SCRIPT_NAME'] ?? ''));
   <link rel="stylesheet" href="/css/portal.css">
 <?php $areaCss = $isAdmin ? 'admin.css' : 'customer.css'; if (is_file(TCD_ROOT . '/css/' . $areaCss)): ?>  <link rel="stylesheet" href="/css/<?= h($areaCss) ?>">
 <?php endif; ?></head>
-<body class="pf-body<?= $isAdmin ? ' pf-body--admin' : '' ?>">
+<body class="pf-body<?= $isAdmin ? ' pf-body--admin' : '' ?><?= isset($vars['bodyClass']) && preg_match('/^[a-z0-9 _-]+$/', (string) $vars['bodyClass']) ? ' ' . h((string) $vars['bodyClass']) : '' ?>">
 <header class="pf-header">
   <div class="pf-container pf-header-inner">
     <a class="pf-logo" href="<?= $isAdmin ? '/admin/' : '/portal/' ?>"><img src="/images/218/16332534/TCD-Studio-LogoohneIcon-wagerecht-x0y5LHULFifqLQb0SZXRUw.png" alt="TCD-Studio/Agency" width="160"></a>

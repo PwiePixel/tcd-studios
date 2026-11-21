@@ -228,3 +228,24 @@ function admin_reviewer_names(array $revisions): array
     }
     return $names;
 }
+
+/**
+ * Package of a profile as escaped HTML for the admin pages: name, prices, and a hint when the profile has
+ * no package of its own (it then counts as the default package) or the package is no longer offered.
+ *
+ * @param array<string,mixed> $profile
+ * @param array<string,mixed>|null $package package_of_profile($profile)
+ */
+function admin_package_html(array $profile, ?array $package): string
+{
+    if ($package === null) {
+        return '<span class="pf-muted">' . h(__('none')) . '</span>';
+    }
+    $out = '<strong>' . h((string) $package['name']) . '</strong> <span class="pf-muted pf-small">' . h(package_price_short($package)) . '</span>';
+    if ($profile['package_id'] === null) {
+        $out .= ' <span class="pf-badge pf-badge--draft">' . h(__('default, not chosen yet')) . '</span>';
+    } elseif ($package['active'] !== 1) {
+        $out .= ' <span class="pf-badge pf-badge--draft">' . h(__('inactive')) . '</span>';
+    }
+    return $out;
+}

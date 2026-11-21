@@ -36,6 +36,15 @@ $hasLive = $profile['live_revision_id'] !== null;
     <p><?= h(portal_status_explanation($status, $hasLive)) ?></p>
     <dl class="pf-kv">
       <dt><?= h(__('Page name')) ?></dt><dd><code><?= h($profile['slug']) ?></code></dd>
+<?php if ($s['package'] !== null): ?>
+      <dt><?= h(__('Package')) ?></dt>
+      <dd id="profile-package"><strong><?= h($s['package']['name']) ?></strong>
+        <span class="pf-muted pf-small"><?= h(package_price_short($s['package'])) ?></span>
+<?php if ($open !== null && $open['state'] === 'draft' && !$readOnly): ?>
+        <div><a class="pf-small" href="/portal/profile-edit.php?id=<?= (int) $profile['id'] ?>#package-card"><?= h(__('Change package')) ?></a></div>
+<?php endif; ?>
+      </dd>
+<?php endif; ?>
       <dt><?= h(__('Live page')) ?></dt>
       <dd>
         <?php if ($s['url'] !== ''): ?>

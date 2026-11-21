@@ -58,6 +58,7 @@ defined('TCD_APP') || exit;
         <tr>
           <th><?= h(__('Public name')) ?></th>
           <th><?= h(__('Page name')) ?></th>
+          <th><?= h(__('Package')) ?></th>
           <th><?= h(__('Status')) ?></th>
           <th><?= h(__('Identity check')) ?></th>
           <th><?= h(__('Live page')) ?></th>
@@ -69,6 +70,7 @@ defined('TCD_APP') || exit;
         <tr>
           <td><strong><?= h($row['name']) ?></strong></td>
           <td><code><?= h($p['slug']) ?></code></td>
+          <td class="pf-package-cell"><?= $row['package'] !== null ? h($row['package']['name']) : '<span class="pf-muted">–</span>' ?></td>
           <td>
             <?= status_badge((string) $p['status']) ?>
             <?php if ($row['update_pending']): ?>

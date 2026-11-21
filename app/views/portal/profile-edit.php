@@ -4,7 +4,7 @@
  * @var array<string,mixed> $form @var array<string,string> $private @var array<string,string> $privateLabels
  * @var array<int,array{label:string,url:string}> $links @var array<string,string> $newLink @var array<string,string> $errors
  * @var array<string,string> $kinds @var int $maxLinks @var string $self @var string $back @var bool $termsAccepted
- * @var array<string,mixed> $identity
+ * @var array<string,mixed> $identity @var array<int,array<string,mixed>> $packages @var string $packageSlug
  */
 defined('TCD_APP') || exit;
 $e = $errors;
@@ -163,6 +163,14 @@ $e = $errors;
       <?= portal_err($e, 'notes') ?>
     </div>
   </div>
+
+<?php if ($packages !== []): ?>
+  <div class="pf-card" id="package-card">
+    <h2><?= h(__('Package')) ?></h2>
+    <p class="pf-muted"><?= h(__('The package of this imprint profile. A change is saved together with your draft; it does not need a review.')) ?></p>
+    <?= render_partial('portal/_package-choice', ['packages' => $packages, 'selected' => $packageSlug, 'errors' => $e, 'help' => '']) ?>
+  </div>
+<?php endif; ?>
 
   <div class="pf-actions">
     <button class="pf-btn" type="submit" name="action" value="save"><?= h(__('Save draft')) ?></button>

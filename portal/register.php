@@ -5,8 +5,15 @@ require dirname(__DIR__) . '/app/bootstrap.php';
 session_boot('portal');
 portal_guard();
 
+// A package chosen on the public page (/imprint-protection/: register.php?package=<slug>) is remembered in the
+// session and preselected when the customer creates the first imprint profile.
+$package = get_str('package', 40) !== '' ? portal_package_remember(get_str('package', 40)) : null;
+if ($package === null && isset($_SESSION['package_choice']) && is_string($_SESSION['package_choice'])) {
+    $package = package_active_by_slug($_SESSION['package_choice']);
+}
+
 if (auth_current_user() !== null) {
-    redirect('/portal/dashboard.php');
+    redirect($package !== null ? '/portal/profile-new.php?package=' . rawurlencode((string) $package['slug']) : '/portal/dashboard.php');
 }
 
 $values = ['name' => '', 'email' => '', 'privacy' => '', 'accept_terms' => ''];
@@ -51,4 +58,5 @@ render_view('portal/register', [
     'values' => $values,
     'errors' => $errors,
     'done'   => $done,
+    'package' => $package,
 ]);
