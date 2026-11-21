@@ -1571,6 +1571,11 @@ final_report() {
 
 remove_installer() {
     local yes=0
+    if [ -d "$ROOT/.git" ]; then
+        # Git-Checkout: nicht löschen (sonst fehlt er nach "git pull"); er ist per .htaccess gesperrt.
+        if [ "$OPT_REMOVE_INSTALLER" = 1 ]; then note "installer.sh bleibt erhalten (Git-Checkout – er ist von außen gesperrt)."; fi
+        return 0
+    fi
     if [ "$OPT_REMOVE_INSTALLER" = 1 ]; then
         yes=1
     elif [ "$ASSUME_YES" != 1 ] && [ -t 0 ]; then
