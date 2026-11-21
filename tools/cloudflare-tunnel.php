@@ -236,6 +236,12 @@ try {
         }
         cf_out('OK', 'dns:' . $h, 'CNAME -> tunnel (proxied)');
     }
+    try {
+        cf_api($token, 'POST', '/zones/' . rawurlencode($zone['id']) . '/purge_cache', ['purge_everything' => true]);
+        cf_out('OK', 'cache', 'Cloudflare cache purged');
+    } catch (Throwable $e) {
+        cf_out('WARN', 'cache', 'cache not purged (the token needs "Zone > Cache Purge > Purge" for that) - purge it in the dashboard: Caching > Configuration > Purge Everything');
+    }
     $runToken = cf_api($token, 'GET', '/accounts/' . $acc . '/cfd_tunnel/' . $tid . '/token');
     if (!is_string($runToken) || preg_match('/^[A-Za-z0-9+\/=_-]{40,}$/', $runToken) !== 1) {
         cf_fail('Cloudflare did not return a tunnel token.');

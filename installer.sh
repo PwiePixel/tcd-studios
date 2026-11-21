@@ -117,7 +117,8 @@ Cloudflare-Tunnel (empfohlen: die Website ist dann nur über Cloudflare erreichb
   --cf-token-file DATEI   Cloudflare-Token aus Datei (erste Zeile). Alternativ: Umgebungsvariable TCD_CF_TOKEN
                           oder verdeckte Eingabe. Zwei Arten werden erkannt:
                             * API-Token (empfohlen) mit den Rechten "Account > Cloudflare Tunnel > Edit",
-                              "Zone > DNS > Edit" und "Zone > Zone > Read": der Installer legt Tunnel, Routen
+                              "Zone > DNS > Edit", "Zone > Zone > Read" (und optional "Zone > Cache Purge"):
+                              der Installer legt Tunnel, Routen
                               und DNS-Einträge selbst an.
                             * Tunnel-Token (aus Zero Trust > Networks > Tunnels): der Tunnel wird nur gestartet,
                               die Hostnamen trägst du im Cloudflare-Dashboard ein.
@@ -785,7 +786,7 @@ gather_tunnel() {
             tok=""
         else
             say "  Am einfachsten: ein API-Token (Cloudflare → My Profile → API Tokens → Create Token → \"Custom token\") mit den Rechten"
-            say "  Account › Cloudflare Tunnel › Edit, Zone › DNS › Edit, Zone › Zone › Read (Zone: deine Domain). Dann legt der Installer alles an."
+            say "  Account › Cloudflare Tunnel › Edit, Zone › DNS › Edit, Zone › Zone › Read, Zone › Cache Purge (Zone: deine Domain). Dann legt der Installer alles an."
             say "  Alternativ ein Tunnel-Token aus Zero Trust → Networks → Tunnels. Leer lassen = ohne Tunnel."
             ask_secret tok "Cloudflare-Token (Eingabe bleibt unsichtbar)"
         fi
@@ -946,7 +947,7 @@ gather_admin() {
         first=$(printf '%s\n' "$out" | awk -F'\t' '$1 == "INFO" && $2 == "admin_email" { print $3; exit }' | tr -d '\000-\037\177')
         say "  Es gibt bereits ein Admin-Konto${first:+: $first}."
         ADMIN_ACTION=keep
-        if [ "$OPT_RESET_ADMIN_PW" = 1 ] || { [ "$ASSUME_YES" != 1 ] && [ -n "$first" ] && ask_yn "Für ${first} ein neues Passwort erzeugen und anzeigen? (das alte gilt dann nicht mehr)" n; }; then
+        if [ "$OPT_RESET_ADMIN_PW" = 1 ] || { [ "$ASSUME_YES" != 1 ] && [ -n "$first" ] && ask_yn "Für ${first} ein neues Passwort erzeugen und anzeigen? (das alte gilt dann nicht mehr)" j; }; then
             ADMIN_EMAIL=${OPT_ADMIN_EMAIL:-$first}
             [ -n "$ADMIN_EMAIL" ] || die "Kein Admin-Konto gefunden, für das ein Passwort gesetzt werden kann."
             ADMIN_ACTION=reset
